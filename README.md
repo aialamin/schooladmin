@@ -316,3 +316,5 @@ JWT_SECRET=your-long-random-secret
 ENABLE_DEMO_ACCOUNTS=true
 CORS_ORIGIN=https://your-vercel-site.vercel.app
 ```
+#   S c h o o l M a n a g e r A d m i n  
+ 
