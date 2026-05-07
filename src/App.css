@@ -6306,6 +6306,32 @@ html[data-theme="dark"] .login-first-hero .pro-secondary-link {
   color: #dbeafe !important;
 }
 
+html:not([data-theme="dark"]) .dashboard-hero.panel {
+  background:
+    radial-gradient(circle at 86% 16%, rgba(37, 99, 235, 0.14), transparent 30%),
+    radial-gradient(circle at 18% 84%, rgba(15, 118, 110, 0.10), transparent 28%),
+    linear-gradient(135deg, #ffffff 0%, #f1f7ff 55%, #e8f3ff 100%) !important;
+  border-color: rgba(37, 99, 235, 0.16) !important;
+  box-shadow: 0 24px 60px rgba(23, 37, 84, 0.12) !important;
+}
+
+html:not([data-theme="dark"]) .dashboard-hero.panel h1,
+html:not([data-theme="dark"]) .dashboard-hero h1.text-white,
+html:not([data-theme="dark"]) .dashboard-hero h1 {
+  color: var(--edu-heading) !important;
+  text-shadow: none !important;
+}
+
+html:not([data-theme="dark"]) .dashboard-hero.panel .eyebrow,
+html:not([data-theme="dark"]) .dashboard-hero .eyebrow {
+  color: var(--edu-primary) !important;
+}
+
+html:not([data-theme="dark"]) .dashboard-hero.panel .hero-copy,
+html:not([data-theme="dark"]) .dashboard-hero .hero-copy {
+  color: var(--edu-muted) !important;
+}
+
 .metric-watermark {
   display: none !important;
 }
