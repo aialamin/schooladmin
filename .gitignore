@@ -1,9 +1,0 @@
-node_modules
-.env
-client/.env
-client/dist
-dist
-dist-desktop
-resources/mongodb-bin
-resources/icon256.png
-.claude
