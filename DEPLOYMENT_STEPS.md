@@ -1,4 +1,4 @@
-# SchoolManage deployment steps
+# SchoolAdmin deployment steps
 
 This project can run in two ways:
 
@@ -10,8 +10,8 @@ This project can run in two ways:
 ### Backend / Render
 
 ```env
-MONGODB_URI=mongodb+srv://<username>:<password>@cluster0.krhhqvp.mongodb.net/SchoolManage?retryWrites=true&w=majority
-MONGODB_DB=SchoolManage
+MONGODB_URI=mongodb+srv://<username>:<password>@cluster0.krhhqvp.mongodb.net/EducationManagement?retryWrites=true&w=majority&appName=Cluster0
+MONGODB_DB=EducationManagement
 JWT_SECRET=replace-with-a-long-random-secret
 ENABLE_DEMO_ACCOUNTS=true
 ENABLE_DEMO_DATA=true
@@ -73,7 +73,7 @@ npm run dev
 1. Open MongoDB Atlas and create or use your existing cluster.
 2. Create a database user with a strong password.
 3. Add your deployment IP access rule. For Render/Vercel testing, allow access from anywhere with `0.0.0.0/0`, then tighten it later if needed.
-4. Copy the connection string and set the database name to `SchoolManage`.
+4. Copy the connection string and set the database name to `EducationManagement`.
 
 ### 2. Push to GitHub
 
@@ -101,8 +101,8 @@ git push -u origin main
 4. Add environment variables:
 
 ```env
-MONGODB_URI=mongodb+srv://<username>:<password>@cluster0.krhhqvp.mongodb.net/SchoolManage?retryWrites=true&w=majority
-MONGODB_DB=SchoolManage
+MONGODB_URI=mongodb+srv://<username>:<password>@cluster0.krhhqvp.mongodb.net/EducationManagement?retryWrites=true&w=majority&appName=Cluster0
+MONGODB_DB=EducationManagement
 JWT_SECRET=use-a-long-random-secret
 ENABLE_DEMO_ACCOUNTS=true
 ENABLE_DEMO_DATA=true

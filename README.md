@@ -311,7 +311,8 @@ VITE_API_URL=https://your-render-service.onrender.com
 For Render backend, set:
 
 ```env
-MONGODB_URI=mongodb+srv://<username>:<password>@cluster0.krhhqvp.mongodb.net/SchoolManage?retryWrites=true&w=majority
+MONGODB_URI=mongodb+srv://<username>:<password>@cluster0.krhhqvp.mongodb.net/EducationManagement?retryWrites=true&w=majority&appName=Cluster0
+MONGODB_DB=EducationManagement
 JWT_SECRET=your-long-random-secret
 ENABLE_DEMO_ACCOUNTS=true
 CORS_ORIGIN=https://your-vercel-site.vercel.app
