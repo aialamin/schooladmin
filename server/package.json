@@ -1,0 +1,13 @@
+{
+  "name": "education-manager-server",
+  "version": "1.0.0",
+  "description": "Education Manager API server",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}
