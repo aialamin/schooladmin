@@ -1,0 +1,15 @@
+node_modules
+.env
+client/.env
+client/dist
+dist
+resources/mongodb-bin
+resources/icon256.png
+.claude
+
+# Per-school runtime database config (contains credentials)
+server/config/school-config.json
+
+# Desktop build — exclude unpacked folder (500 MB), keep installer
+dist-desktop/win-unpacked/
+dist-desktop/builder-debug.yml

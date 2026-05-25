@@ -1,0 +1,72 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# electron-builder configuration — School Manager Desktop
+# Run:  npm run electron:build   →  creates dist-desktop/School Manager Setup.exe
+# ─────────────────────────────────────────────────────────────────────────────
+
+appId:       com.schoolmanager.erp
+productName: School Manager
+copyright:   Copyright © 2025 Md. Al Amin Hossain
+
+# ── Files to include ──────────────────────────────────────────────────────────
+files:
+  - client/dist/**          # React production build
+  - server/**               # Express backend
+  - electron/**             # Electron entry, preload, zkteco, mongodb managers
+  - resources/**            # Icons, bundled assets
+  - package.json
+  - package-lock.json
+
+# Disable asar so the forked server process can require() all node_modules
+# directly from the filesystem without hitting the asar boundary.
+asar: false
+
+# ── Extra resources (outside asar, accessible via process.resourcesPath) ──────
+extraResources:
+  # If you pre-download the mongod binary, place it here for a true offline install
+  - from: resources/mongodb-bin/
+    to:   mongodb-bin/
+    filter:
+      - "mongod*"
+      - "mongos*"
+
+# ── Output directory ──────────────────────────────────────────────────────────
+directories:
+  output: dist-desktop
+  buildResources: resources
+
+# ── Windows ───────────────────────────────────────────────────────────────────
+win:
+  target:
+    - target: nsis
+      arch:   [x64]
+  icon: resources/icon.ico
+
+nsis:
+  oneClick:               true     # ← single-click install (no wizard pages)
+  perMachine:             false    # install for current user (no UAC prompt)
+  allowToChangeInstallationDirectory: false
+  createDesktopShortcut:  true
+  createStartMenuShortcut: true
+  shortcutName:           "School Manager"
+  installerIcon:          resources/icon.ico
+  uninstallerIcon:        resources/icon.ico
+  installerHeaderIcon:    resources/icon.ico
+  deleteAppDataOnUninstall: false   # keep database on uninstall
+
+# ── macOS (optional) ──────────────────────────────────────────────────────────
+mac:
+  target: dmg
+  icon:   resources/icon.icns
+  category: public.app-category.education
+
+# ── Linux (optional) ──────────────────────────────────────────────────────────
+linux:
+  target: AppImage
+  icon:   resources/icon.png
+  category: Education
+
+# ── Publish (GitHub Releases — enables auto-update) ──────────────────────────
+publish:
+  provider: github
+  owner:    alaminjava
+  repo:     schooladmin

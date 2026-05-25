@@ -1,0 +1,29 @@
+[
+  {
+    "id": "6657e6b9-0395-48cf-ae38-cff08bcec763",
+    "name": "alamin",
+    "email": "test@gmail.com",
+    "role": "teacher",
+    "salt": "22732de91b0d880507a996a69949e745",
+    "passwordHash": "71b5680fa17a5528b584b827d1c733bf965fe8b8d512c98dbfda6b43e2f0f4a2596e7c5c35b31526f1cbd577948cca5584bdc0a695f8eb4782d1c075a37e6ddd",
+    "createdAt": "2026-05-01T18:38:45.004Z"
+  },
+  {
+    "id": "265563a9-d185-4eb7-b27f-442dccdbb034",
+    "name": "alamin",
+    "email": "alaminit@proton.me",
+    "role": "admin",
+    "salt": "16ef8ac9117ad6207738c7b531660c66",
+    "passwordHash": "ff6d4a207b5d225322dc609f41a6d37dfb126a6a01e87b4f16eb35d613881c52710c439f85cd8f61eecfb9b65f8b5cb1f03421cb9874861939c1d2de7fc55e32",
+    "createdAt": "2026-05-01T19:01:30.590Z"
+  },
+  {
+    "id": "8a1dc48a-6799-43a0-985f-7027ef0c5f10",
+    "name": "alamin",
+    "email": "alamin@admin.com",
+    "role": "admin",
+    "salt": "23d6bd174173ab53e1b2b0b57ed4ca7c",
+    "passwordHash": "3509317121297d2418a9dd7b81c12b178a6989fc945fd1a7e0d3e8fbb2970699f4961d8ac5618be8f586a115b270bdf68fbdace191defe34b08d8ece42f42ded",
+    "createdAt": "2026-05-01T19:07:47.100Z"
+  }
+]
