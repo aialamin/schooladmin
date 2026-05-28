@@ -96,6 +96,7 @@ async function generateMonthlySalaries({ month } = {}) {
         employee: employee.id,
         salaryMonth,
         amount,
+        bonusAmount: 0,
         paidAmount: 0,
         dueAmount: amount,
         status: "unpaid",
@@ -114,7 +115,8 @@ async function recordSalaryPayment(payload) {
     throw new Error("Employee was not found.");
   }
 
-  const amount = normalizeMoney(payload.amount || employee.salaryAmount);
+  const bonusAmount = normalizeMoney(payload.bonusAmount);
+  const amount = normalizeMoney(payload.amount || (Number(employee.salaryAmount || 0) + bonusAmount));
   const paidAmount = normalizeMoney(payload.paidAmount);
   const dueAmount = Math.max(amount - paidAmount, 0);
   const salary = await SalaryPayment.findOneAndUpdate(
@@ -124,6 +126,7 @@ async function recordSalaryPayment(payload) {
     },
     {
       amount,
+      bonusAmount,
       paidAmount,
       dueAmount,
       status: paymentStatus(amount, paidAmount),

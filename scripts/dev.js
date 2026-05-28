@@ -20,7 +20,15 @@ function run(name, command, args) {
 }
 
 console.log("Starting School Manager backend on http://localhost:5001 ...");
-const backend = run("backend", "node", ["server/server.js"]);
+// Use nodemon in dev so the server auto-restarts when any server file changes.
+const nodemonArgs = [
+  "nodemon",
+  "--watch", "server",
+  "--ext",   "js,json",
+  "--delay", "300ms",
+  "server/server.js",
+];
+const backend = run("backend", isWindows ? "npx.cmd" : "npx", nodemonArgs);
 
 setTimeout(() => {
   console.log("Starting School Manager frontend on http://localhost:5173 ...");

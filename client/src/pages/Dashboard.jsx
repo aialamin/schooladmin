@@ -1,4 +1,4 @@
-import { Fragment, memo, useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Modal from "../components/Modal";
 import AdminLayout from "../layouts/AdminLayout";
 import { api, getErrorMessage } from "../api";
@@ -60,7 +60,7 @@ const emptyForms = {
   student: { name: "", classFee: "", rollNumber: "", phone: "", email: "", guardianName: "", address: "", dateOfBirth: "", admissionDate: new Date().toISOString().slice(0, 10), status: "active", section: "", gender: "" },
   payment: { student: "", feeType: "monthly", amount: 0, paidAmount: 0, billingMonth: currentMonth, term: "", note: "" },
   employee: { name: "", role: "teacher", salaryType: "monthly", salaryAmount: 0, phone: "", email: "", address: "", assignedClass: "", isClassTeacher: false, subject: "", joiningDate: new Date().toISOString().slice(0, 10), status: "active" },
-  salary: { employee: "", salaryMonth: currentMonth, amount: 0, paidAmount: 0, note: "" },
+  salary: { employee: "", salaryMonth: currentMonth, amount: 0, bonusAmount: 0, paidAmount: 0, note: "" },
   monthlyFees: { month: currentMonth },
   examFees: { term: "Term 1" },
   monthlySalaries: { month: currentMonth },
@@ -96,11 +96,80 @@ function toDateInput(value) {
   return new Date(value).toISOString().slice(0, 10);
 }
 
+function toDateKey(yearValue, monthIndex, day) {
+  return `${yearValue}-${String(monthIndex + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+function findIslamicCalendarDate(yearValue, islamicMonth, islamicDay) {
+  const formatter = new Intl.DateTimeFormat("en-u-ca-islamic", {
+    day: "numeric",
+    month: "numeric",
+    year: "numeric",
+  });
+
+  for (let monthIndex = 0; monthIndex < 12; monthIndex += 1) {
+    const daysInMonth = new Date(yearValue, monthIndex + 1, 0).getDate();
+    for (let day = 1; day <= daysInMonth; day += 1) {
+      const parts = formatter.formatToParts(new Date(yearValue, monthIndex, day));
+      const numericPart = (type) => Number(parts.find((part) => part.type === type)?.value);
+      if (numericPart("month") === islamicMonth && numericPart("day") === islamicDay) {
+        return toDateKey(yearValue, monthIndex, day);
+      }
+    }
+  }
+
+  return "";
+}
+
+function addHolidayRange(map, startKey, length, label, type = "bangladesh") {
+  if (!startKey) return;
+  const start = new Date(`${startKey}T00:00:00`);
+  for (let offset = 0; offset < length; offset += 1) {
+    const date = new Date(start);
+    date.setDate(start.getDate() + offset);
+    map.set(date.toISOString().slice(0, 10), { label, type });
+  }
+}
+
+function buildBangladeshHolidayMap(yearValue) {
+  const holidays = new Map([
+    [`${yearValue}-02-21`, { label: "Language Martyrs' Day", type: "bangladesh" }],
+    [`${yearValue}-03-17`, { label: "Sheikh Mujibur Rahman Birthday", type: "bangladesh" }],
+    [`${yearValue}-03-26`, { label: "Independence Day", type: "bangladesh" }],
+    [`${yearValue}-04-14`, { label: "Bengali New Year", type: "bangladesh" }],
+    [`${yearValue}-05-01`, { label: "May Day", type: "bangladesh" }],
+    [`${yearValue}-08-15`, { label: "National Mourning Day", type: "bangladesh" }],
+    [`${yearValue}-12-16`, { label: "Victory Day", type: "bangladesh" }],
+    [`${yearValue}-12-25`, { label: "Christmas Day", type: "bangladesh" }],
+  ]);
+
+  addHolidayRange(holidays, findIslamicCalendarDate(yearValue, 10, 1), 3, "Eid-ul-Fitr");
+  addHolidayRange(holidays, findIslamicCalendarDate(yearValue, 12, 10), 3, "Eid-ul-Adha");
+  addHolidayRange(holidays, findIslamicCalendarDate(yearValue, 9, 27), 1, "Shab-e-Qadr");
+  addHolidayRange(holidays, findIslamicCalendarDate(yearValue, 1, 10), 1, "Ashura");
+  addHolidayRange(holidays, findIslamicCalendarDate(yearValue, 3, 12), 1, "Eid-e-Miladunnabi");
+
+  addHolidayRange(holidays, `${yearValue}-06-01`, 14, "Summer School Holiday", "school");
+  addHolidayRange(holidays, `${yearValue}-12-15`, 17, "Winter School Holiday", "school");
+
+  return holidays;
+}
+
+function sectionLabel(section) {
+  if (!section) return "";
+  if (typeof section === "string") return section;
+  return section.sectionName || section.name || "";
+}
+
+function userAccountKey(account = {}) {
+  return account._id || account.id || account.email || "";
+}
+
 const ATTENDANCE_STATUS_COLOR = {
-  present:  "bg-emerald-100 text-emerald-700",
-  late:     "bg-amber-100 text-amber-700",
-  absent:   "bg-rose-100 text-rose-700",
-  leave:    "bg-blue-100 text-blue-700",
+  present:    "bg-emerald-100 text-emerald-700",
+  late:       "bg-amber-100 text-amber-700",
+  absent:     "bg-red-600 text-white",
+  leave:      "bg-blue-100 text-blue-700",
   "half-day": "bg-purple-100 text-purple-700",
 };
 
@@ -546,8 +615,8 @@ function salaryPaymentReceiptHtml(salary = {}, settings = {}) {
       <div class="field"><span>Salary Month</span><strong>${escapeHtml(salary.salaryMonth || "-")}</strong></div>
       <div class="field"><span>Status</span><strong>${escapeHtml(salary.status || "paid")}</strong></div>
     </div>
-    <table><thead><tr><th>Description</th><th class="amount">Amount</th></tr></thead><tbody><tr><td>Salary payment for ${escapeHtml(salary.salaryMonth || "selected month")}</td><td class="amount">${money.format(salary.amount || 0)}</td></tr></tbody></table>
-    <div class="summary"><div><span>Total Salary</span><strong>${money.format(salary.amount || 0)}</strong></div><div><span>Paid</span><strong>${money.format(salary.paidAmount || 0)}</strong></div><div><span>Due</span><strong>${money.format(salary.dueAmount || 0)}</strong></div></div>
+    <table><thead><tr><th>Description</th><th class="amount">Amount</th></tr></thead><tbody><tr><td>Base salary for ${escapeHtml(salary.salaryMonth || "selected month")}</td><td class="amount">${money.format(Math.max(Number(salary.amount || 0) - Number(salary.bonusAmount || 0), 0))}</td></tr>${Number(salary.bonusAmount || 0) > 0 ? `<tr><td>Bonus</td><td class="amount">${money.format(salary.bonusAmount || 0)}</td></tr>` : ""}</tbody></table>
+    <div class="summary"><div><span>Total Payable</span><strong>${money.format(salary.amount || 0)}</strong></div><div><span>Bonus</span><strong>${money.format(salary.bonusAmount || 0)}</strong></div><div><span>Paid</span><strong>${money.format(salary.paidAmount || 0)}</strong></div><div><span>Due</span><strong>${money.format(salary.dueAmount || 0)}</strong></div></div>
     <p class="note"><strong>Note:</strong> ${escapeHtml(salary.note || "Salary payment received.")}</p>
     <div class="footer"><span>Accounts Signature</span><span>Employee Signature</span></div>
   </div>
@@ -660,6 +729,10 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
   const [editingId, setEditingId] = useState("");
   const [form, setForm] = useState(emptyForms.classFee);
   const [profileStudent, setProfileStudent] = useState(null);
+  const [profileTab, setProfileTab] = useState("overview"); // "overview" | "payments" | "marks" | "results"
+  const [markBulkRows, setMarkBulkRows] = useState([]); // [{ subject, totalMarks, obtainedMarks, note, enabled }]
+  const [markEntryClass, setMarkEntryClass] = useState(""); // class filter for admin bulk mark entry
+  const [calendarYear, setCalendarYear] = useState(() => new Date().getFullYear());
   const [resultCardFilter, setResultCardFilter] = useState({ student: "", exam: "", class: "", teacher: "" });
   const [classFilter, setClassFilter] = useState("");
   const [classwiseClassFilter, setClasswiseClassFilter] = useState("");
@@ -702,9 +775,13 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
   // User account management (admin only)
   const [allUsers, setAllUsers] = useState([]);
   const [allUsersLoading, setAllUsersLoading] = useState(false);
-  const [userPasswordTarget, setUserPasswordTarget] = useState(null); // user whose password is being set
-  const [userPasswordForm, setUserPasswordForm] = useState({ password: "", confirmPassword: "" });
+  const [userPasswordTarget, setUserPasswordTarget] = useState(null); // user whose email/password is being edited
+  const [userPasswordForm, setUserPasswordForm] = useState({ email: "", password: "", confirmPassword: "" });
+  const [userAccountDrafts, setUserAccountDrafts] = useState({});
+  const [visibleUserPasswords, setVisibleUserPasswords] = useState({});
   const [userPasswordLoading, setUserPasswordLoading] = useState(false);
+  const [adminUserMgmtOpen, setAdminUserMgmtOpen] = useState(false); // user mgmt panel in settings
+  const [userMgmtSearch, setUserMgmtSearch] = useState(""); // search filter in user mgmt panel
 
   const isAdmin = user.role === "admin";
   const financeAllowed = ["admin", "accounts", "accountant"].includes(user.role);
@@ -715,7 +792,12 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
     return data.employees.find((employee) => String(employee.contactInfo?.email || "").toLowerCase() === userEmail);
   }, [data.employees, user.email]);
   const isAssignedClassTeacher = Boolean(currentEmployee?.isClassTeacher && currentEmployee?.assignedClass);
-  const paymentWriteAllowed = financeAllowed || (user.role === "teacher" && isAssignedClassTeacher);
+  const currentStudent = useMemo(() => {
+    if (user.role !== "student") return null;
+    const email = String(user.email || "").toLowerCase();
+    return email ? data.students.find((s) => String(s.contactInfo?.email || "").toLowerCase() === email) || null : null;
+  }, [user.role, user.email, data.students]);
+  const paymentWriteAllowed = financeAllowed; // teachers cannot record payments
   const teacherReadAllowed = ["admin", "teacher", "staff", "accounts", "accountant", "audit"].includes(user.role);
   const studentReadAllowed = teacherReadAllowed || user.role === "student";
   const teacherAllowed = isAdmin || (user.role === "teacher" && isAssignedClassTeacher);
@@ -764,7 +846,14 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
     if (activeView !== "settings" || user.role !== "admin") return;
     setAllUsersLoading(true);
     erpApi.getUsers(token)
-      .then((res) => setAllUsers(res.data.users || []))
+      .then((res) => {
+        const users = res.data.users || [];
+        setAllUsers(users);
+        setUserAccountDrafts(Object.fromEntries(users.map((account) => [
+          userAccountKey(account),
+          { email: account.email || "", password: "" },
+        ])));
+      })
       .catch(() => {})
       .finally(() => setAllUsersLoading(false));
   }, [activeView, token, user.role]);
@@ -773,6 +862,22 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
     document.documentElement.setAttribute("data-theme", theme);
     localStorage.setItem("schoolManagerTheme", theme);
   }, [theme]);
+
+  // Rebuild subject rows when the student changes in bulk mark-entry mode.
+  // form.totalMarks is intentionally excluded from deps — we snapshot it at the moment
+  // the student is chosen, so rows already entered aren't wiped when user edits the field.
+  const markTotalMarksRef = useRef(100);
+  markTotalMarksRef.current = Number(form.totalMarks) || 100;
+  useEffect(() => {
+    if (modal !== "mark" || editingId) return;
+    if (!form.student) { setMarkBulkRows([]); return; }
+    const student = data.students.find((s) => s._id === form.student);
+    if (!student) { setMarkBulkRows([]); return; }
+    const subjects = subjectsForClass(student.className);
+    const defaultTotal = markTotalMarksRef.current;
+    setMarkBulkRows(subjects.map((subject) => ({ subject, totalMarks: defaultTotal, obtainedMarks: "", note: "", enabled: true })));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.student, modal, editingId, data.students]);
 
   const classNames = useMemo(() => {
     const names = new Set(academicClassOptions.map((item) => item.className));
@@ -820,7 +925,14 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
     }
 
     if (!row) {
-      setForm(emptyForms[type]);
+      if (type === "student" && user.role === "teacher" && currentEmployee?.assignedClass) {
+        // For class teachers: auto-select their class on new-student form
+        const myFee = data.classFees.find((f) => f.className === currentEmployee.assignedClass);
+        setForm({ ...emptyForms.student, classFee: myFee?._id || "" });
+      } else {
+        setForm(emptyForms[type]);
+      }
+      if (type === "mark") setMarkEntryClass(""); // reset class filter for fresh entry
       setModal(type);
       return;
     }
@@ -959,7 +1071,7 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
       });
     }
     setModal(type);
-  }, [data.schoolSettings, user]);
+  }, [data.schoolSettings, data.classFees, user, currentEmployee]);
 
   function showDoneAlert(message) {
     setSuccess(`Done! ${message}`);
@@ -1164,20 +1276,46 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
         showDoneAlert(`${response.created} salary records generated.`);
       }
       if (modal === "mark") {
-        const { data: markResp } = editingId
-          ? await erpApi.updateMark(token, editingId, form)
-          : await erpApi.createMark(token, form);
-        // Re-fetch only marks + results (marks affect the auto-calculated result summary)
+        if (editingId) {
+          // Single-mark edit (unchanged)
+          await erpApi.updateMark(token, editingId, form);
+          showDoneAlert("Mark updated.");
+        } else {
+          // Bulk multi-subject entry
+          const validRows = markBulkRows.filter((r) => r.enabled && r.obtainedMarks !== "");
+          if (validRows.length === 0) {
+            setError("Enter obtained marks for at least one subject.");
+            setLoading(false);
+            return;
+          }
+          await Promise.all(
+            validRows.map((row) =>
+              erpApi.createMark(token, {
+                student: form.student,
+                subject: row.subject,
+                examType: form.examType,
+                examNo: Number(form.examNo) || 1,
+                month: form.month,
+                academicYear: Number(form.academicYear) || year,
+                totalMarks: Number(row.totalMarks) || 100,
+                obtainedMarks: Number(row.obtainedMarks) || 0,
+                contributionPercent: Number(form.contributionPercent) || 0,
+                note: row.note || "",
+              })
+            )
+          );
+          showDoneAlert(`${validRows.length} mark${validRows.length > 1 ? "s" : ""} entered.`);
+        }
+        // Re-fetch marks + results
         const [marksRes, resultsRes] = await Promise.all([
           api.get("/api/marks", { headers: { Authorization: `Bearer ${token}` } }),
           api.get("/api/marks/results", { headers: { Authorization: `Bearer ${token}` } }),
         ]);
-        setData(prev => ({
+        setData((prev) => ({
           ...prev,
           marks: marksRes.data.marks || [],
           markResults: resultsRes.data.results || [],
         }));
-        showDoneAlert(editingId ? "Mark updated." : "Mark entered.");
       }
       if (modal === "routine") {
         const { data: routineResp } = editingId
@@ -1242,6 +1380,9 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
                   a.className.localeCompare(b.className) || a.sectionName.localeCompare(b.sectionName)
                 ),
           }));
+          // Refresh employees so Class Teachers page reflects isClassTeacher changes immediately
+          const empPartial = await refreshPartialData(token, ["employees"]);
+          setData(prev => ({ ...prev, ...empPartial }));
         }
         showDoneAlert(editingId ? "Section updated." : "Section created.");
       }
@@ -1331,25 +1472,31 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
     }
   }
 
-  async function handleSetUserPassword() {
-    if (!userPasswordTarget) return;
-    if (userPasswordForm.password !== userPasswordForm.confirmPassword) {
-      setError("Passwords do not match.");
-      return;
-    }
+  async function handleSetUserPassword(account) {
+    if (!account) return;
+    const accountKey = userAccountKey(account);
+    const accountId = account._id || account.id;
+    const draft = userAccountDrafts[accountKey] || { email: account.email || "", password: "" };
+    const newEmail = (draft.email || "").trim();
+    const newPassword = draft.password || "";
+    const hasPwChange = newPassword.length > 0;
+    if (!accountId) { setError("User id is missing for this account."); return; }
+    if (!newEmail) { setError("Email cannot be empty."); return; }
+    if (hasPwChange && newPassword.length < 6) { setError("Password must be at least 6 characters."); return; }
     setUserPasswordLoading(true);
     setError("");
     setSuccess("");
     try {
-      await erpApi.updateUser(token, userPasswordTarget._id, {
-        name: userPasswordTarget.name,
-        email: userPasswordTarget.email,
-        role: userPasswordTarget.role,
-        password: userPasswordForm.password,
-      });
-      setSuccess(`Password updated for ${userPasswordTarget.name}.`);
-      setUserPasswordTarget(null);
-      setUserPasswordForm({ password: "", confirmPassword: "" });
+      const payload = { name: account.name, email: newEmail, role: account.role };
+      if (hasPwChange) payload.password = newPassword;
+      await erpApi.updateUser(token, accountId, payload);
+      const changed = [];
+      if (newEmail !== account.email) changed.push("email");
+      if (hasPwChange) changed.push("password");
+      setSuccess(changed.length ? `${changed.join(" & ")} updated for ${account.name}.` : `No changes made for ${account.name}.`);
+      setAllUsers((prev) => prev.map((u) => userAccountKey(u) === accountKey ? { ...u, email: newEmail } : u));
+      setUserAccountDrafts((prev) => ({ ...prev, [accountKey]: { email: newEmail, password: "" } }));
+      setVisibleUserPasswords((prev) => ({ ...prev, [accountKey]: false }));
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
@@ -1471,6 +1618,7 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
     const existing = data.salaries.find((item) => (item.employee?._id || item.employee) === employeeId && item.salaryMonth === salaryMonth);
     return {
       amount: existing?.amount ?? employee?.salaryAmount ?? 0,
+      bonusAmount: existing?.bonusAmount ?? 0,
       paidAmount: existing?.paidAmount ?? 0,
       dueAmount: existing?.dueAmount ?? (employee?.salaryAmount || 0),
       status: existing?.status || "unpaid",
@@ -1570,7 +1718,7 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
     )},
     { key: "guardian", label: "Guardian", search: (row) => row.contactInfo?.guardianName, render: (row) => row.contactInfo?.guardianName || "Not set" },
     { key: "phone", label: "Phone", search: (row) => row.contactInfo?.phone, render: (row) => row.contactInfo?.phone || "Not set" },
-    { key: "due", label: "Due Payment", render: (row) => <strong className="danger-text">{money.format(row.dueAmount || 0)}</strong> },
+    { key: "due", label: "Due Payment", render: (row) => <span className="danger-text">{money.format(row.dueAmount || 0)}</span> },
     { key: "status", label: "Status", render: (row) => <Status status={row.status} /> },
     { key: "actions", label: "Actions", render: (row) => (
       <div className="action-row compact">
@@ -1621,7 +1769,7 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
     },
     { key: "salaryType", label: "Salary Type", render: (row) => <span className="capitalize">{row.salaryType}</span> },
     { key: "salary", label: "Salary", render: (row) => money.format(row.salaryAmount || 0) },
-    { key: "due", label: "Due Salary", render: (row) => <strong className="danger-text">{money.format(row.dueSalary || 0)}</strong> },
+    { key: "due", label: "Due Salary", render: (row) => <span className="danger-text">{money.format(row.dueSalary || 0)}</span> },
     { key: "status", label: "Status", render: (row) => <Status status={row.status} /> },
     { key: "actions", label: "Actions", render: (row) => financeAllowed && (
       <div className="action-row compact">
@@ -1683,18 +1831,19 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
     { key: "teacher", label: "Teacher", render: (row) => row.teacherName },
     { key: "room", label: "Room", render: (row) => row.room || "-" },
     { key: "status", label: "Status", render: (row) => <Status status={row.status} /> },
-    { key: "actions", label: "Actions", render: (row) => teacherAllowed && (
+    { key: "actions", label: "Actions", render: (row) => isAdmin && (
       <div className="action-row compact">
         <ActionButton icon="edit" label="Edit routine" onClick={() => openModal("routine", row)} />
         <ActionButton icon="delete" label="Delete routine" tone="danger" onClick={() => handleDelete("routine", row._id)} />
       </div>
     )},
-  ], [teacherAllowed, openModal, handleDelete]);
+  ], [isAdmin, openModal, handleDelete]);
 
   const salariesColumns = useMemo(() => [
     { key: "employee", label: "Employee", render: (row) => row.employee?.name || "Employee" },
     { key: "month", label: "Month", render: (row) => row.salaryMonth },
     { key: "amount", label: "Amount", render: (row) => money.format(row.amount || 0) },
+    { key: "bonus", label: "Bonus", render: (row) => money.format(row.bonusAmount || 0) },
     { key: "paid", label: "Paid", render: (row) => money.format(row.paidAmount || 0) },
     { key: "due", label: "Due", render: (row) => money.format(row.dueAmount || 0) },
     { key: "status", label: "Status", render: (row) => <Status status={row.status} /> },
@@ -1720,11 +1869,106 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
     )},
   ], [financeAllowed, openModal, handleDelete, isAdmin]);
 
-  const renderDashboard = () => (
+  const renderDashboard = () => {
+    // ── Student personal dashboard ───────────────────────────────────────────
+    if (user.role === "student") {
+      const myId = currentStudent?._id ? String(currentStudent._id) : null;
+      const myPayments = myId ? data.payments.filter((p) => String(p.student?._id || p.student) === myId) : [];
+      const myMarks = myId ? data.marks.filter((m) => String(m.student?._id || m.student) === myId) : [];
+      const myResults = myId ? data.markResults.filter((r) => String(r.student?._id || r.student) === myId) : [];
+      const totalDue = myPayments.reduce((s, p) => s + (p.dueAmount || 0), 0);
+      const totalPaid = myPayments.reduce((s, p) => s + (p.paidAmount || 0), 0);
+      const todayName = new Date().toLocaleDateString("en-GB", { weekday: "long" });
+      const myRoutines = currentStudent?.className ? data.routines.filter((r) => r.className === currentStudent.className && r.day === todayName) : [];
+      const classColors = { "Play": "#7c3aed", "Nursery": "#0891b2", "KG": "#0d9488" };
+      const avatarBg = classColors[currentStudent?.className] || "#2563eb";
+      const initials = String(user.name || "S").split(" ").filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase()).join("");
+      return (
+        <div className="stack dashboard-stack">
+          {/* Student hero */}
+          <section className="dashboard-hero panel overflow-hidden border border-white/70 bg-gradient-to-br from-slate-950 via-blue-950 to-blue-700 shadow-[0_24px_70px_rgba(15,23,42,0.16)]">
+            <div>
+              <p className="eyebrow text-blue-100">{new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</p>
+              <div style={{ display: "flex", alignItems: "center", gap: "16px", margin: "6px 0 14px" }}>
+                {/* Avatar with camera upload button */}
+                <div style={{ position: "relative", flexShrink: 0 }}>
+                  <div style={{ width: 56, height: 56, borderRadius: "50%", background: `${avatarBg}55`, border: "2.5px solid rgba(255,255,255,0.4)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, fontWeight: 900, color: "#fff", overflow: "hidden" }}>
+                    {user.photoUrl
+                      ? <img alt="Profile" src={user.photoUrl} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                      : initials}
+                  </div>
+                  <button
+                    type="button"
+                    title="Upload profile photo"
+                    onClick={() => openModal("userSettings")}
+                    style={{ position: "absolute", bottom: 0, right: -1, width: 22, height: 22, borderRadius: "50%", background: "rgba(255,255,255,0.92)", border: "1.5px solid rgba(255,255,255,0.5)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", padding: 0, boxShadow: "0 1px 4px rgba(0,0,0,0.18)" }}
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="#1e293b" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 11, height: 11 }}>
+                      <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+                      <circle cx="12" cy="13" r="4" />
+                    </svg>
+                  </button>
+                </div>
+                <div>
+                  <h1 className="text-white" style={{ fontSize: "22px", margin: 0 }}>Hello, {user?.name || "Student"}!</h1>
+                  <p className="text-blue-100" style={{ margin: "3px 0 0", fontSize: "13.5px" }}>
+                    {currentStudent ? `${currentStudent.className}${currentStudent.rollNumber ? ` · Roll #${currentStudent.rollNumber}` : ""}` : "Student"}
+                  </p>
+                </div>
+              </div>
+              <div className="hero-actions flex flex-wrap gap-3">
+                <button className="btn soft hero-btn" type="button" onClick={() => setActiveView("marks")}><DashboardIcon name="marks" className="btn-icon" /><span>My Marks</span></button>
+                <button className="btn soft hero-btn" type="button" onClick={() => setActiveView("fees")}><DashboardIcon name="wallet" className="btn-icon" /><span>My Fees</span></button>
+                <button className="btn soft hero-btn" type="button" onClick={() => setActiveView("academicCalendar")}><DashboardIcon name="calendar" className="btn-icon" /><span>Calendar</span></button>
+                <button className="btn soft hero-btn" type="button" onClick={() => setActiveView("routines")}><DashboardIcon name="clock" className="btn-icon" /><span>Routine</span></button>
+              </div>
+            </div>
+            {totalDue > 0 && (
+              <div className="hero-score-card collection-card border border-white/25 bg-white/15 text-white shadow-2xl backdrop-blur-xl">
+                <div className="collection-copy">
+                  <span>Outstanding Due</span>
+                  <strong>{money.format(totalDue)}</strong>
+                  <small><b>{money.format(totalPaid)} paid</b><em>•</em>contact office</small>
+                </div>
+                <div className="collection-ring" style={{ "--rate": `${totalPaid + totalDue > 0 ? Math.round((totalPaid / (totalPaid + totalDue)) * 100) : 0}%` }}>
+                  <DashboardIcon name="wallet" />
+                </div>
+              </div>
+            )}
+          </section>
+          {/* Student stat cards */}
+          <div className="stats-grid premium-stats">
+            <StatCard icon="marks" label="My Mark Records" tone="violet" value={myMarks.length} helper={`${myResults.length} result summaries`} />
+            <StatCard icon="due" label="Total Due" tone="orange" value={money.format(totalDue)} helper={totalDue > 0 ? "Contact school office" : "All clear!"} />
+            <StatCard icon="wallet" label="Total Paid" tone="blue" value={money.format(totalPaid)} helper={`${myPayments.length} payment records`} />
+            <StatCard icon="calendar" label="Today's Classes" tone="pink" value={myRoutines.length} helper={myRoutines.length ? myRoutines.map((r) => r.subject).join(", ") : "No classes today"} />
+          </div>
+          {/* Today's routine */}
+          {myRoutines.length > 0 && (
+            <div className="panel" style={{ padding: "18px 22px" }}>
+              <p style={{ margin: "0 0 12px", fontWeight: 800, fontSize: "13px", textTransform: "uppercase", letterSpacing: "0.07em", color: "var(--ui-muted,#64748b)" }}>Today's Schedule — {todayName}</p>
+              <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                {myRoutines.map((r) => (
+                  <div key={r._id} style={{ display: "flex", alignItems: "center", gap: "14px", padding: "10px 14px", background: "var(--edu-bg-alt,#f8fafc)", borderRadius: "10px", border: "1px solid var(--edu-border,#e2e8f0)" }}>
+                    <span style={{ fontSize: "12px", fontWeight: 700, color: "#2563eb", minWidth: 100 }}>{r.startTime} – {r.endTime}</span>
+                    <span style={{ fontWeight: 700, fontSize: "14px", color: "var(--ui-text,#1e293b)" }}>{r.subject}</span>
+                    {r.teacherName && <span style={{ fontSize: "12.5px", color: "var(--ui-muted,#64748b)", marginLeft: "auto" }}>{r.teacherName}</span>}
+                    {r.room && <span style={{ fontSize: "12px", color: "var(--ui-muted,#64748b)" }}>Room {r.room}</span>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // ── Admin / staff / teacher dashboard ───────────────────────────────────
+    return (
     <div className="stack dashboard-stack">
       <section className="dashboard-hero panel overflow-hidden border border-white/70 bg-gradient-to-br from-slate-950 via-blue-950 to-blue-700 shadow-[0_24px_70px_rgba(15,23,42,0.16)]">
         <div>
-          <p className="eyebrow text-blue-100">Dashboard</p>
+          <p className="eyebrow text-blue-100">{new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</p>
           <h1 className="text-white">Welcome back, {user?.name || "User"}.</h1>
           <p className="hero-copy text-blue-100">Manage students, fees, marks, routines, and reports from one place.</p>
           <div className="hero-actions flex flex-wrap gap-3">
@@ -1818,7 +2062,8 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
         </div>
       </section>
     </div>
-  );
+    );
+  }; // end renderDashboard
 
 
   const renderStudents = () => (
@@ -1843,24 +2088,68 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
     </>
   );
 
-  const renderFees = () => (
-    <div className="stack">
-      <SectionHeader
-        eyebrow="Fee Management"
-        title="Class Fee Rules and Payment Ledger"
-        action={(financeAllowed || paymentWriteAllowed) && (
-          <>
-            {financeAllowed && <button className="btn primary" type="button" onClick={() => openModal("classFee")}>Add Class Rule</button>}
-            {financeAllowed && <button className="btn dark" type="button" onClick={() => openModal("monthlyFees")}>Generate Monthly</button>}
-            {financeAllowed && <button className="btn warn" type="button" onClick={() => openModal("examFees")}>Generate Exam</button>}
-            {paymentWriteAllowed && <button className="btn success" type="button" onClick={() => openModal("payment")}>Record Payment</button>}
-          </>
-        )}
-      />
-      <DataTable columns={classFeesColumns} rows={data.classFees} />
-      <DataTable columns={paymentsColumns} rows={data.payments} />
-    </div>
-  );
+  const renderFees = () => {
+    // Student role: show only their own payments
+    if (user.role === "student") {
+      const myId = currentStudent?._id ? String(currentStudent._id) : null;
+      const myPayments = myId ? data.payments.filter((p) => String(p.student?._id || p.student) === myId) : [];
+      const totalPaid = myPayments.reduce((s, p) => s + (p.paidAmount || 0), 0);
+      const totalDue = myPayments.reduce((s, p) => s + (p.dueAmount || 0), 0);
+      const myClassFee = currentStudent?.classFee || data.classFees.find((f) => f.className === currentStudent?.className);
+      return (
+        <div className="stack">
+          <SectionHeader eyebrow="My Fees" title="My Payments &amp; Dues" />
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: "12px" }}>
+            {[
+              { label: "Total Paid",  value: money.format(totalPaid),   color: "var(--app-success,#059669)", bg: "color-mix(in srgb,var(--app-success) 12%,var(--app-surface-2,#f8fafc))" },
+              { label: "Total Due",   value: money.format(totalDue),    color: totalDue > 0 ? "var(--app-danger,#dc2626)" : "var(--app-success,#059669)", bg: totalDue > 0 ? "color-mix(in srgb,var(--app-danger) 12%,var(--app-surface-2,#f8fafc))" : "color-mix(in srgb,var(--app-success) 12%,var(--app-surface-2,#f8fafc))" },
+              { label: "Payments",    value: myPayments.length,         color: "var(--app-primary,#2563eb)", bg: "color-mix(in srgb,var(--app-primary) 12%,var(--app-surface-2,#f8fafc))" },
+              { label: "Monthly Fee", value: myClassFee ? money.format(myClassFee.monthlyFee || 0) : "—", color: "#7c3aed", bg: "color-mix(in srgb,#7c3aed 12%,var(--app-surface-2,#f8fafc))" },
+            ].map((s) => (
+              <div key={s.label} style={{ background: s.bg, borderRadius: "14px", padding: "16px", border: "1px solid var(--app-border,#e2e8f0)" }}>
+                <p style={{ margin: "0 0 6px", fontSize: "11px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: s.color }}>{s.label}</p>
+                <p style={{ margin: 0, fontSize: "22px", fontWeight: 800, color: s.color }}>{s.value}</p>
+              </div>
+            ))}
+          </div>
+          <div className="table-card smart-table-card">
+            <div className="table-toolbar"><div><h3 style={{margin:0}}>My Payment History</h3><p style={{margin:"2px 0 0",fontSize:"13px",color:"var(--edu-muted)"}}>{myPayments.length} record{myPayments.length !== 1 ? "s" : ""}</p></div></div>
+            <DataTable columns={paymentsColumns} rows={myPayments} searchPlaceholder="Search payments…" />
+          </div>
+        </div>
+      );
+    }
+    return (
+      <div className="stack">
+        <SectionHeader
+          eyebrow="Fee Management"
+          title="Class Fee Rules and Payment Ledger"
+          action={(financeAllowed || paymentWriteAllowed) && (
+            <div className="fee-action-grid">
+              {financeAllowed && <button className="btn primary" type="button" onClick={() => openModal("classFee")}>Add Class Rule</button>}
+              {financeAllowed && <button className="btn dark" type="button" onClick={() => openModal("monthlyFees")}>Generate Monthly</button>}
+              {financeAllowed && <button className="btn warn" type="button" onClick={() => openModal("examFees")}>Generate Exam</button>}
+              {paymentWriteAllowed && <button className="btn success" type="button" onClick={() => openModal("payment")}>Record Payment</button>}
+            </div>
+          )}
+        />
+        <section className="fee-overview-card">
+          <div>
+            <p className="eyebrow">Finance Overview</p>
+            <h3>Rules, ledgers, and collection status</h3>
+            <span>Keep class fees, generated dues, and payment receipts aligned from one finance workspace.</span>
+          </div>
+          <div className="fee-overview-stats">
+            <span><strong>{data.classFees.length}</strong><small>Class rules</small></span>
+            <span><strong>{data.payments.length}</strong><small>Ledger rows</small></span>
+            <span><strong>{money.format(visibleDue)}</strong><small>Visible due</small></span>
+          </div>
+        </section>
+        <DataTable columns={classFeesColumns} rows={data.classFees} />
+        <DataTable columns={paymentsColumns} rows={data.payments} />
+      </div>
+    );
+  };
 
   const renderEmployees = () => {
     // ── Stats computation ────────────────────────────────────────────────────
@@ -1949,7 +2238,7 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
                 </p>
               </div>
             </div>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:"10px",padding:"0 0 12px"}}>
+            <div className="class-teacher-grid" style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:"10px",padding:"18px 20px 22px"}}>
               {Object.entries(classTeacherMap).sort(([a], [b]) => {
                 const ia = academicClassOptions.findIndex((c) => c.className === a);
                 const ib = academicClassOptions.findIndex((c) => c.className === b);
@@ -2303,6 +2592,26 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
   }, [marksFilterSection, data.students]);
 
   const renderMarks = () => {
+    // Student role: always locked to their own data
+    if (user.role === "student") {
+      const myId = currentStudent?._id ? String(currentStudent._id) : null;
+      const myMarks = myId ? data.marks.filter((m) => String(m.student?._id || m.student) === myId) : [];
+      const myResults = myId ? data.markResults.filter((r) => String(r.student?._id || r.student) === myId) : [];
+      return (
+        <div className="stack">
+          <SectionHeader eyebrow="My Academic Marks" title="My Marks &amp; Results" />
+          <div className="table-card smart-table-card">
+            <div className="table-toolbar"><div><h3 style={{margin:0}}>My Mark Records</h3><p style={{margin:"2px 0 0",fontSize:"13px",color:"var(--edu-muted)"}}>{myMarks.length} record{myMarks.length !== 1 ? "s" : ""}</p></div></div>
+            <DataTable columns={marksColumns} rows={myMarks} searchPlaceholder="Search subject, exam…" />
+          </div>
+          <div className="table-card smart-table-card">
+            <div className="table-toolbar"><div><h3 style={{margin:0}}>My Final Results</h3><p style={{margin:"2px 0 0",fontSize:"13px",color:"var(--edu-muted)"}}>Auto-calculated final results</p></div></div>
+            <DataTable columns={markResultsColumns} rows={myResults} searchPlaceholder="Search subject…" />
+          </div>
+        </div>
+      );
+    }
+
     const studentIdsInSection = studentIdsInMarksSection;
 
     const filteredMarks = data.marks.filter((m) => {
@@ -2660,7 +2969,7 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
       <SectionHeader
         eyebrow="Class Routine"
         title="Teacher Routine Planner"
-        action={teacherAllowed && <button className="btn primary" type="button" onClick={() => openModal("routine")}>Add Routine</button>}
+        action={isAdmin && <button className="btn primary" type="button" onClick={() => openModal("routine")}>Add Routine</button>}
       />
       <DataTable columns={routinesColumns} rows={data.routines} />
     </>
@@ -2688,17 +2997,21 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
   const renderReports = () => (
     <div className="stack">
       <SectionHeader eyebrow="Reports" title="School Snapshot" />
-      <div className="stats-grid">
-        {financeAllowed && <StatCard icon="wallet" label="Collected Fees" tone="amber" value={money.format(data.dashboard.totalIncome || paidCollection || 0)} />}
-        <StatCard icon="eye" label="Student Due" tone="green" value={money.format(visibleDue)} />
-        <StatCard icon="due" label="Salary Due" tone="orange" value={money.format(totalSalaryDue)} />
-        <StatCard icon="marks" label="Result Records" tone="violet" value={data.markResults.length} />
-        <StatCard icon="chart" label="Collection" tone="blue" value={`${collectionRate}%`} />
+      <div className="stats-grid report-snapshot-grid">
+        {financeAllowed && <StatCard icon="wallet" label="Collected Fees" tone="amber" value={money.format(data.dashboard.totalIncome || paidCollection || 0)} helper={`${data.payments.length} payment records`} />}
+        <StatCard icon="eye" label="Student Due" tone="green" value={money.format(visibleDue)} helper={`${visibleDueRows} open payment rows`} />
+        <StatCard icon="due" label="Salary Due" tone="orange" value={money.format(totalSalaryDue)} helper={`${data.salaries.filter((row) => Number(row.dueAmount || 0) > 0).length} salary rows pending`} />
+        <StatCard icon="marks" label="Result Records" tone="violet" value={data.markResults.length} helper={`${resultCards.length} printable result cards`} />
+        <StatCard icon="chart" label="Collection" tone="blue" value={`${collectionRate}%`} helper={`${money.format(paidCollection)} collected vs ${money.format(visibleDue)} due`} />
+        <StatCard icon="student" label="Active Students" tone="cyan" value={activeStudents || data.dashboard.totalStudents || 0} helper={`${data.students.length} total student profiles`} />
+        <StatCard icon="employees" label="Active Staff" tone="pink" value={activeEmployees || data.dashboard.totalEmployees || 0} helper={`${data.employees.length} total employee profiles`} />
+        <StatCard icon="calendar" label="Routine Slots" tone="blue" value={data.routines.length} helper={`${todayRoutineSlots} active today`} />
       </div>
-      <div className="business-rules-grid">
-        <article className="info-card"><h3>Access</h3><p>Admin, teacher, accounts, staff, and student roles are separated.</p></article>
-        <article className="info-card"><h3>Results</h3><p>Marks use total marks, obtained marks, and contribution percentage.</p></article>
-        <article className="info-card"><h3>Routine</h3><p>Class and teacher time conflicts are checked.</p></article>
+      <div className="business-rules-grid report-insight-grid">
+        <article className="info-card"><h3>Finance Health</h3><p>{collectionRate}% of visible fees are collected. Pending student dues total {money.format(visibleDue)} and salary dues total {money.format(totalSalaryDue)}.</p></article>
+        <article className="info-card"><h3>Academic Output</h3><p>{data.marks.length} mark entries feed {resultCards.length} printable report cards across classes and exam groups.</p></article>
+        <article className="info-card"><h3>People & Access</h3><p>{activeEmployees || data.dashboard.totalEmployees || 0} active employees support role-based portals for admin, finance, teachers, staff, students, and audit users.</p></article>
+        <article className="info-card"><h3>Operations</h3><p>{data.routines.length} routine slots, {data.sections.length} sections, and {data.classrooms.length} classrooms are available for daily planning.</p></article>
       </div>
     </div>
   );
@@ -2766,6 +3079,191 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
     }
   };
 
+  // ── Teachers directory (student role) ──────────────────────────────────────
+  const renderTeachers = () => {
+    const teachers = data.employees.filter((e) => e.role === "teacher");
+    return (
+      <div className="stack">
+        <SectionHeader eyebrow="Faculty" title="Our Teachers" />
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: "14px" }}>
+          {teachers.length === 0 && (
+            <p style={{ color: "var(--ui-muted,#64748b)", gridColumn: "1/-1", padding: "24px 0", textAlign: "center" }}>No teachers found.</p>
+          )}
+          {teachers.map((t) => {
+            const initials = String(t.name || "T").split(" ").filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase()).join("");
+            const avatarColors = ["#2563eb", "#7c3aed", "#059669", "#d97706", "#dc2626", "#0891b2", "#4f46e5"];
+            const bg = avatarColors[Math.abs(t.name?.charCodeAt(0) || 0) % avatarColors.length];
+            return (
+              <div key={t._id} style={{ background: "var(--ui-surface,#f8fafc)", border: "1.5px solid var(--edu-border,#e2e8f0)", borderRadius: "16px", padding: "20px", display: "flex", flexDirection: "column", alignItems: "center", gap: "10px", textAlign: "center" }}>
+                <div style={{ width: 56, height: 56, borderRadius: "50%", background: `${bg}22`, border: `2px solid ${bg}44`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, fontWeight: 800, color: bg }}>
+                  {initials}
+                </div>
+                <div>
+                  <p style={{ margin: 0, fontWeight: 800, fontSize: "15px", color: "var(--ui-text,#1e293b)" }}>{t.name}</p>
+                  {t.subject && <p style={{ margin: "3px 0 0", fontSize: "12.5px", color: "var(--ui-muted,#64748b)", fontWeight: 600 }}>{t.subject}</p>}
+                </div>
+                <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", justifyContent: "center" }}>
+                  {t.assignedClass && (
+                    <span style={{ padding: "2px 10px", borderRadius: "999px", background: "#eff6ff", color: "#1d4ed8", fontSize: "11.5px", fontWeight: 700 }}>{t.assignedClass}</span>
+                  )}
+                  {t.isClassTeacher && (
+                    <span style={{ padding: "2px 10px", borderRadius: "999px", background: "#ecfdf5", color: "#065f46", fontSize: "11.5px", fontWeight: 700 }}>Class Teacher</span>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
+  // ── Academic Calendar (all roles) ───────────────────────────────────────────
+  const renderAcademicCalendar = () => {
+    const today = new Date();
+    const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+    const dayNames = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
+
+    // Months that have mark entries for the selected year
+    const examMonthsSet = new Set(
+      data.marks
+        .filter((m) => {
+          if (!m.month) return false;
+          const yr = Number(String(m.month).split("-")[0]);
+          return yr === calendarYear;
+        })
+        .map((m) => Number(String(m.month).split("-")[1]) - 1)
+    );
+    const holidayMap = buildBangladeshHolidayMap(calendarYear);
+    const examDateMap = new Map();
+    examMonthsSet.forEach((monthIndex) => {
+      const daysInMonth = new Date(calendarYear, monthIndex + 1, 0).getDate();
+      const startDay = Math.min(10, daysInMonth);
+      const endDay = Math.min(startDay + 6, daysInMonth);
+      for (let day = startDay; day <= endDay; day += 1) {
+        examDateMap.set(toDateKey(calendarYear, monthIndex, day), { label: "Exam date" });
+      }
+    });
+
+    // Routine active days (by day-of-week index: 0=Sun)
+    const routineDayNames = { Saturday: 6, Sunday: 0, Monday: 1, Tuesday: 2, Wednesday: 3, Thursday: 4, Friday: 5 };
+    const routineDaySet = new Set(data.routines.map((r) => routineDayNames[r.day] ?? -1));
+
+    // For student: only their class routines
+    const myClassName = currentStudent?.className;
+    const myRoutines = user.role === "student" && myClassName
+      ? data.routines.filter((r) => r.className === myClassName)
+      : data.routines;
+    const myRoutineDaySet = new Set(myRoutines.map((r) => routineDayNames[r.day] ?? -1));
+
+    return (
+      <div className="stack">
+        <SectionHeader
+          eyebrow="Academic Calendar"
+          title={`Year ${calendarYear}`}
+          action={
+            <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+              <button className="btn soft" type="button" onClick={() => setCalendarYear((y) => y - 1)}>← {calendarYear - 1}</button>
+              <button className="btn soft" type="button" onClick={() => setCalendarYear((y) => y + 1)}>{calendarYear + 1} →</button>
+            </div>
+          }
+        />
+
+        {/* Legend */}
+        <div style={{ display: "flex", gap: "16px", flexWrap: "wrap", padding: "10px 0 4px" }}>
+          {[
+            { dot: "#2563eb", label: "Today" },
+            { dot: "#1d4ed8", label: "Exam date" },
+            { dot: "#dc2626", label: "Holiday" },
+            { dot: "#059669", label: "Class day (routine)" },
+          ].map((l) => (
+            <span key={l.label} style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12.5px", fontWeight: 600, color: "var(--ui-muted,#64748b)" }}>
+              <span style={{ width: 10, height: 10, borderRadius: "50%", background: l.dot, display: "inline-block" }} />
+              {l.label}
+            </span>
+          ))}
+        </div>
+
+        {/* 12-month grid */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: "14px" }}>
+          {Array.from({ length: 12 }, (_, monthIdx) => {
+            const isCurrentMonth = today.getFullYear() === calendarYear && today.getMonth() === monthIdx;
+            const hasExams = examMonthsSet.has(monthIdx);
+            const firstDay = new Date(calendarYear, monthIdx, 1).getDay();
+            const daysInMonth = new Date(calendarYear, monthIdx + 1, 0).getDate();
+            const cells = [...Array(firstDay).fill(null), ...Array.from({ length: daysInMonth }, (_, i) => i + 1)];
+            return (
+              <div key={monthIdx} style={{ background: isCurrentMonth ? "var(--edu-bg-alt,#f0f9ff)" : "var(--ui-surface,#f8fafc)", border: `1.5px solid ${isCurrentMonth ? "#2563eb" : "var(--edu-border,#e2e8f0)"}`, borderRadius: "14px", padding: "14px", overflow: "hidden" }}>
+                {/* Month header */}
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
+                  <span style={{ fontWeight: 800, fontSize: "13.5px", color: isCurrentMonth ? "#2563eb" : "var(--ui-text,#1e293b)" }}>
+                    {monthNames[monthIdx]}
+                  </span>
+                  <div style={{ display: "flex", gap: "4px" }}>
+                    {hasExams && <span style={{ fontSize: "10px", padding: "2px 7px", borderRadius: "999px", background: "#dbeafe", color: "#1d4ed8", fontWeight: 700 }}>Exams</span>}
+                    {isCurrentMonth && <span style={{ fontSize: "10px", padding: "2px 7px", borderRadius: "999px", background: "#eff6ff", color: "#2563eb", fontWeight: 700 }}>Now</span>}
+                  </div>
+                </div>
+                {/* Day names row */}
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: "2px", marginBottom: "3px" }}>
+                  {dayNames.map((d) => (
+                    <span key={d} style={{ fontSize: "9px", fontWeight: 700, color: "var(--ui-muted,#94a3b8)", textAlign: "center", padding: "1px 0" }}>{d}</span>
+                  ))}
+                </div>
+                {/* Day cells */}
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: "2px" }}>
+                  {cells.map((day, i) => {
+                    if (!day) return <span key={`e-${i}`} />;
+                    const isToday = isCurrentMonth && day === today.getDate();
+                    const dow = new Date(calendarYear, monthIdx, day).getDay();
+                    const dateKey = toDateKey(calendarYear, monthIdx, day);
+                    const weekendHoliday = dow === 5 || dow === 6;
+                    const holiday = holidayMap.get(dateKey);
+                    const examDate = examDateMap.get(dateKey);
+                    const isHoliday = weekendHoliday || Boolean(holiday);
+                    const isRoutineDay = myRoutineDaySet.has(dow);
+                    const cellTitle = examDate?.label || holiday?.label || (weekendHoliday ? "Weekend holiday" : isRoutineDay ? "Class day" : "");
+                    return (
+                      <span
+                        key={day}
+                        title={cellTitle}
+                        style={{
+                          display: "flex", alignItems: "center", justifyContent: "center",
+                          aspectRatio: "1", borderRadius: "9px", fontSize: "10.5px",
+                          fontWeight: isToday || examDate || isHoliday ? 900 : isRoutineDay ? 700 : 500,
+                          background: isToday ? "#1d4ed8" : examDate ? "#dbeafe" : isHoliday ? "#fee2e2" : "transparent",
+                          color: isToday ? "#fff" : examDate ? "#1d4ed8" : isHoliday ? "#dc2626" : isRoutineDay ? "#047857" : "var(--ui-text,#1e293b)",
+                          outline: isRoutineDay && !isToday && !isHoliday && !examDate ? "1.5px solid #d1fae5" : "none",
+                          cursor: "default",
+                        }}
+                      >
+                        {day}
+                      </span>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Exam months summary */}
+        {examMonthsSet.size > 0 && (
+          <div className="panel" style={{ padding: "16px 20px" }}>
+            <p style={{ margin: "0 0 10px", fontWeight: 800, fontSize: "13px", color: "var(--ui-text,#1e293b)" }}>Exam Months in {calendarYear}</p>
+            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+              {[...examMonthsSet].sort((a, b) => a - b).map((m) => (
+                <span key={m} style={{ padding: "4px 14px", borderRadius: "999px", background: "#dbeafe", color: "#1d4ed8", fontSize: "12.5px", fontWeight: 700, border: "1px solid #bfdbfe" }}>
+                  {monthNames[m]}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const renderSettings = () => (
     <div className="stack settings-page">
       <SectionHeader
@@ -2786,18 +3284,22 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
           <p>Switch between light and dark mode.</p>
           <button className="btn dark" type="button" onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>{theme === "dark" ? "Use Light Mode" : "Use Dark Mode"}</button>
         </article>
-        <article className="settings-card panel">
-          <span className="settings-icon"><DashboardIcon name="school" /></span>
-          <h3>School Settings</h3>
-          <p>Set school name, logos, contact details, academic year, and report text.</p>
-          {isAdmin ? <button className="btn warn" type="button" onClick={() => openModal("schoolSettings")}>Edit School</button> : <small>Admin only</small>}
-        </article>
-        <article className="settings-card panel">
-          <span className="settings-icon"><DashboardIcon name="pdf" /></span>
-          <h3>Report Cards</h3>
-          <p>Control report title, principal name, pass mark, and default remarks.</p>
-          {isAdmin ? <button className="btn soft" type="button" onClick={() => openModal("schoolSettings")}>Report Settings</button> : <small>Admin only</small>}
-        </article>
+        {isAdmin && (
+          <article className="settings-card panel">
+            <span className="settings-icon"><DashboardIcon name="school" /></span>
+            <h3>School Settings</h3>
+            <p>Set school name, logos, contact details, academic year, and report text.</p>
+            <button className="btn warn" type="button" onClick={() => openModal("schoolSettings")}>Edit School</button>
+          </article>
+        )}
+        {isAdmin && (
+          <article className="settings-card panel">
+            <span className="settings-icon"><DashboardIcon name="pdf" /></span>
+            <h3>Report Cards</h3>
+            <p>Control report title, principal name, pass mark, and default remarks.</p>
+            <button className="btn soft" type="button" onClick={() => openModal("schoolSettings")}>Report Settings</button>
+          </article>
+        )}
         <article className="settings-card panel">
           <span className="settings-icon"><DashboardIcon name="lock" /></span>
           <h3>Security</h3>
@@ -2810,111 +3312,150 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
           <p>Reload dashboard data after changing records.</p>
           <button className="btn success" type="button" onClick={refresh}>Refresh Data</button>
         </article>
+        {isAdmin && (
+          <article className="settings-card panel">
+            <span className="settings-icon" style={{ background: "linear-gradient(135deg,#6366f1,#8b5cf6)", color: "#fff" }}><DashboardIcon name="addUser" /></span>
+            <h3>User Management</h3>
+            <p>Search accounts, update email addresses, and reset passwords.</p>
+            <button className="btn soft" type="button" onClick={() => setAdminUserMgmtOpen((v) => !v)}>
+              {adminUserMgmtOpen ? "Close Panel" : "Manage Users"}
+            </button>
+          </article>
+        )}
       </section>
 
-      {/* User Accounts — admin only */}
-      {isAdmin && (
+      {/* ── User Management Panel — admin only ────────────────────── */}
+      {isAdmin && adminUserMgmtOpen && (
         <section className="panel" style={{ padding: 0, overflow: "hidden" }}>
+          {/* Header */}
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "16px", flexWrap: "wrap", padding: "20px 24px", borderBottom: "1px solid var(--ui-line,#e2e8f0)" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
-              <span className="settings-icon" style={{ borderRadius: "12px", background: "linear-gradient(135deg,#6366f1,#8b5cf6)", color: "#fff" }}>
+              <span className="settings-icon" style={{ background: "linear-gradient(135deg,#6366f1,#8b5cf6)", color: "#fff" }}>
                 <DashboardIcon name="addUser" />
               </span>
               <div>
-                <h3 style={{ fontSize: "16px", fontWeight: 700, color: "var(--ui-text,#1e293b)" }}>User Accounts</h3>
-                <p style={{ margin: "2px 0 0", fontSize: "13px" }}>View all login accounts. Set or reset passwords for any user.</p>
+                <h3 style={{ fontSize: "16px", fontWeight: 700, color: "var(--ui-text,#1e293b)", margin: 0 }}>User Management</h3>
+                <p style={{ margin: "2px 0 0", fontSize: "13px", color: "var(--ui-muted,#64748b)" }}>Update email and password for any user account.</p>
               </div>
             </div>
+            {/* Search */}
+            <div style={{ position: "relative", minWidth: 220, flex: "0 0 auto" }}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", width: 15, height: 15, color: "var(--ui-muted,#64748b)", pointerEvents: "none" }}>
+                <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
+              </svg>
+              <input
+                className="control"
+                placeholder="Search name or email…"
+                value={userMgmtSearch}
+                onChange={(e) => setUserMgmtSearch(e.target.value)}
+                style={{ paddingLeft: "34px", height: "38px", fontSize: "13px" }}
+              />
+            </div>
           </div>
+
+          {/* User list */}
           <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
             {allUsersLoading ? (
               <div style={{ padding: "20px 24px", color: "var(--ui-muted,#64748b)", fontSize: "13px" }}>Loading users…</div>
             ) : allUsers.length === 0 ? (
               <div style={{ padding: "20px 24px", color: "var(--ui-muted,#64748b)", fontSize: "13px" }}>No user accounts found.</div>
-            ) : (
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px", minWidth: "480px" }}>
-                <thead>
-                  <tr style={{ borderBottom: "1px solid var(--ui-line,#e2e8f0)" }}>
-                    {["Name", "Email", "Role", "Action"].map((h) => (
-                      <th key={h} style={{ padding: "10px 16px", textAlign: "left", fontWeight: 700, color: "var(--ui-muted,#64748b)", fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.08em", whiteSpace: "nowrap" }}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {allUsers.map((u) => (
-                    <Fragment key={u._id}>
-                      <tr style={{ borderBottom: "1px solid var(--ui-line,#e2e8f0)" }}>
-                        <td style={{ padding: "11px 16px", fontWeight: 600, color: "var(--ui-text,#1e293b)", whiteSpace: "nowrap" }}>{u.name}</td>
-                        <td style={{ padding: "11px 16px", color: "var(--ui-muted,#64748b)" }}>{u.email}</td>
-                        <td style={{ padding: "11px 16px", whiteSpace: "nowrap" }}>
-                          <span style={{ padding: "2px 10px", borderRadius: "999px", fontSize: "11.5px", fontWeight: 700, background: "rgba(99,102,241,0.08)", color: "#4f46e5", border: "1px solid rgba(99,102,241,0.2)" }}>
-                            {u.role}
-                          </span>
-                        </td>
-                        <td style={{ padding: "11px 16px", whiteSpace: "nowrap" }}>
-                          <button
-                            type="button"
-                            className="btn soft"
-                            style={{ fontSize: "12px", minHeight: "30px", padding: "3px 12px" }}
-                            onClick={() => {
-                              setUserPasswordTarget(userPasswordTarget?._id === u._id ? null : u);
-                              setUserPasswordForm({ password: "", confirmPassword: "" });
-                              setError("");
-                            }}
-                          >
-                            {userPasswordTarget?._id === u._id ? "Cancel" : "Set Password"}
-                          </button>
-                        </td>
-                      </tr>
-                      {userPasswordTarget?._id === u._id && (
-                        <tr key={`${u._id}-pw`} style={{ background: "rgba(99,102,241,0.03)", borderBottom: "1px solid var(--ui-line,#e2e8f0)" }}>
-                          <td colSpan={4} style={{ padding: "12px 16px" }}>
-                            <div style={{ display: "flex", flexWrap: "wrap", gap: "10px", alignItems: "flex-end" }}>
-                              <label style={{ flex: 1, minWidth: "140px", display: "flex", flexDirection: "column", gap: "4px", fontSize: "12px", fontWeight: 700, color: "var(--ui-text,#1e293b)" }}>
-                                New Password
-                                <input
-                                  type="password"
-                                  className="control"
-                                  placeholder="Min 6 characters"
-                                  value={userPasswordForm.password}
-                                  minLength={6}
-                                  autoComplete="new-password"
-                                  onChange={(e) => setUserPasswordForm((prev) => ({ ...prev, password: e.target.value }))}
-                                />
-                              </label>
-                              <label style={{ flex: 1, minWidth: "140px", display: "flex", flexDirection: "column", gap: "4px", fontSize: "12px", fontWeight: 700, color: "var(--ui-text,#1e293b)" }}>
-                                Confirm Password
-                                <input
-                                  type="password"
-                                  className="control"
-                                  placeholder="Repeat password"
-                                  value={userPasswordForm.confirmPassword}
-                                  minLength={6}
-                                  autoComplete="new-password"
-                                  onChange={(e) => setUserPasswordForm((prev) => ({ ...prev, confirmPassword: e.target.value }))}
-                                />
-                              </label>
-                              <button
-                                type="button"
-                                className="btn primary"
-                                style={{ fontSize: "12px", minHeight: "38px", padding: "4px 18px", alignSelf: "flex-end" }}
-                                disabled={userPasswordLoading || userPasswordForm.password.length < 6 || userPasswordForm.password !== userPasswordForm.confirmPassword}
-                                onClick={handleSetUserPassword}
-                              >
-                                {userPasswordLoading ? "Saving…" : "Save Password"}
+            ) : (() => {
+              const q = userMgmtSearch.toLowerCase();
+              const filtered = q ? allUsers.filter((u) => u.name?.toLowerCase().includes(q) || u.email?.toLowerCase().includes(q)) : allUsers;
+              return (
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px", minWidth: "860px" }}>
+                  <thead>
+                    <tr style={{ borderBottom: "1px solid var(--ui-line,#e2e8f0)" }}>
+                      {["Name", "Email", "Password", "Role", "Action"].map((h) => (
+                        <th key={h} style={{ padding: "10px 16px", textAlign: "left", fontWeight: 700, color: "var(--ui-muted,#64748b)", fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.08em", whiteSpace: "nowrap" }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filtered.map((u) => {
+                      const accountKey = userAccountKey(u);
+                      const draft = userAccountDrafts[accountKey] || { email: u.email || "", password: "" };
+                      const passwordValue = draft.password || "";
+                      return (
+                      <Fragment key={accountKey}>
+                        <tr style={{ borderBottom: "1px solid var(--ui-line,#e2e8f0)" }}>
+                          <td style={{ padding: "11px 16px", fontWeight: 600, color: "var(--ui-text,#1e293b)", whiteSpace: "nowrap" }}>{u.name}</td>
+                          <td style={{ padding: "11px 16px", minWidth: 220 }}>
+                            <input type="email" className="control" value={(draft.email ?? u.email) || ""} autoComplete="off" onChange={(e) => setUserAccountDrafts((prev) => ({ ...prev, [accountKey]: { email: e.target.value, password: prev[accountKey]?.password || "" } }))} />
+                          </td>
+                          <td style={{ padding: "11px 16px", minWidth: 220 }}>
+                            <div className="password-eye-field">
+                              <input type={visibleUserPasswords[accountKey] ? "text" : "password"} className="control" placeholder="********" value={passwordValue} minLength={6} autoComplete="new-password" onChange={(e) => setUserAccountDrafts((prev) => ({ ...prev, [accountKey]: { email: prev[accountKey]?.email ?? u.email ?? "", password: e.target.value } }))} />
+                              <button aria-label={visibleUserPasswords[accountKey] ? "Hide password" : "Show password"} type="button" className="password-eye-btn" onClick={() => setVisibleUserPasswords((prev) => ({ ...prev, [accountKey]: !prev[accountKey] }))}>
+                                <DashboardIcon name="eye" />
                               </button>
                             </div>
-                            {userPasswordForm.password && userPasswordForm.confirmPassword && userPasswordForm.password !== userPasswordForm.confirmPassword && (
-                              <p style={{ margin: "6px 0 0", fontSize: "11.5px", color: "#dc2626", fontWeight: 600 }}>Passwords do not match.</p>
-                            )}
+                            {passwordValue.length > 0 && passwordValue.length < 6 && <small style={{ display: "block", marginTop: 5, color: "#dc2626", fontWeight: 700 }}>Use at least 6 characters.</small>}
+                          </td>
+                          <td style={{ padding: "11px 16px", whiteSpace: "nowrap" }}>
+                            <span style={{ padding: "2px 10px", borderRadius: "999px", fontSize: "11.5px", fontWeight: 700, background: "rgba(99,102,241,0.08)", color: "#4f46e5", border: "1px solid rgba(99,102,241,0.2)" }}>{u.role}</span>
+                          </td>
+                          <td style={{ padding: "11px 16px", whiteSpace: "nowrap" }}>
+                            <button
+                              type="button"
+                              className="btn primary"
+                              style={{ fontSize: "12px", minHeight: "38px", padding: "6px 12px" }}
+                              disabled={userPasswordLoading || !String((draft.email ?? u.email) || "").trim() || (passwordValue.length > 0 && passwordValue.length < 6)}
+                              onClick={() => handleSetUserPassword(u)}
+                            >
+                              {userPasswordLoading ? "Saving..." : "Save Changes"}
+                            </button>
                           </td>
                         </tr>
-                      )}
-                    </Fragment>
-                  ))}
-                </tbody>
-              </table>
-            )}
+                        {userPasswordTarget?._id === "__legacy-inline-editor-disabled__" && userPasswordTarget?._id === u._id && (
+                          <tr key={`${u._id}-edit`} style={{ background: "rgba(99,102,241,0.03)", borderBottom: "1px solid var(--ui-line,#e2e8f0)" }}>
+                            <td colSpan={4} style={{ padding: "16px 20px" }}>
+                              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: "12px", alignItems: "end" }}>
+                                <label style={{ display: "flex", flexDirection: "column", gap: "4px", fontSize: "12px", fontWeight: 700, color: "var(--ui-text,#1e293b)" }}>
+                                  Email Address
+                                  <input type="email" className="control" value={userPasswordForm.email} autoComplete="off" onChange={(e) => setUserPasswordForm((p) => ({ ...p, email: e.target.value }))} />
+                                </label>
+                                <label style={{ display: "flex", flexDirection: "column", gap: "4px", fontSize: "12px", fontWeight: 700, color: "var(--ui-text,#1e293b)" }}>
+                                  New Password <span style={{ fontWeight: 500, color: "var(--ui-muted,#64748b)" }}>(optional)</span>
+                                  <input type="password" className="control" placeholder="Leave blank to keep" value={userPasswordForm.password} minLength={6} autoComplete="new-password" onChange={(e) => setUserPasswordForm((p) => ({ ...p, password: e.target.value }))} />
+                                </label>
+                                <label style={{ display: "flex", flexDirection: "column", gap: "4px", fontSize: "12px", fontWeight: 700, color: "var(--ui-text,#1e293b)" }}>
+                                  Confirm Password
+                                  <input type="password" className="control" placeholder="Repeat new password" value={userPasswordForm.confirmPassword} minLength={6} autoComplete="new-password" onChange={(e) => setUserPasswordForm((p) => ({ ...p, confirmPassword: e.target.value }))} />
+                                </label>
+                                <div style={{ display: "flex", gap: "8px", alignSelf: "end" }}>
+                                  <button
+                                    type="button"
+                                    className="btn primary"
+                                    style={{ fontSize: "12px", minHeight: "44px", flex: 1 }}
+                                    disabled={userPasswordLoading || !userPasswordForm.email.trim() || (userPasswordForm.password.length > 0 && userPasswordForm.password !== userPasswordForm.confirmPassword)}
+                                    onClick={handleSetUserPassword}
+                                  >
+                                    {userPasswordLoading ? "Saving…" : "Save Changes"}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="btn soft"
+                                    style={{ fontSize: "12px", minHeight: "44px" }}
+                                    disabled={userPasswordLoading}
+                                    onClick={() => { setUserPasswordTarget(null); setUserPasswordForm({ email: "", password: "", confirmPassword: "" }); setError(""); }}
+                                  >
+                                    Cancel
+                                  </button>
+                                </div>
+                              </div>
+                              {userPasswordForm.password && userPasswordForm.confirmPassword && userPasswordForm.password !== userPasswordForm.confirmPassword && (
+                                <p style={{ margin: "8px 0 0", fontSize: "11.5px", color: "#dc2626", fontWeight: 600 }}>Passwords do not match.</p>
+                              )}
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
+                    )})}
+                  </tbody>
+                </table>
+              );
+            })()}
           </div>
         </section>
       )}
@@ -3178,7 +3719,7 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
     monthlyFees: "Generate Monthly Fees",
     examFees: "Generate Exam Fees",
     monthlySalaries: "Generate Monthly Salaries",
-    mark: editingId ? "Edit Mark" : "Enter Mark",
+    mark: editingId ? "Edit Mark" : "Enter Marks",
     routine: editingId ? "Edit Class Routine" : "Add Class Routine",
     increment: editingId ? "Edit Salary Increment" : "Add Salary Increment",
     schoolSettings: "School Settings",
@@ -3195,7 +3736,7 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
   const subjectOptionsForForm = modal === "mark" && selectedMarkStudent ? subjectsForClass(selectedMarkStudent.className) : allSubjectOptions;
 
   // For teacher role, filter mark-entry students to only their section's class
-  const markEntryStudents = useMemo(() => {
+  const markEntryStudentsBase = useMemo(() => {
     if (user.role !== "teacher") return data.students;
     const mySectionClasses = new Set(
       data.sections
@@ -3210,8 +3751,16 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
     }
     return data.students.filter((s) => mySectionClasses.has(s.className));
   }, [user, data.sections, data.students, data.employees]);
+
+  // For admin/non-teacher: apply the class-picker filter from the mark entry form
+  const markEntryStudents = useMemo(() => {
+    if (user.role === "teacher") return markEntryStudentsBase; // already class-filtered
+    if (!markEntryClass) return markEntryStudentsBase;
+    return markEntryStudentsBase.filter((s) => s.className === markEntryClass);
+  }, [user.role, markEntryStudentsBase, markEntryClass]);
   const salaryAutoPreview = modal === "salary" ? getSalaryAutoValues(form.employee, form.salaryMonth) : null;
   const salaryDuePreview = modal === "salary" ? Math.max(Number(form.amount || salaryAutoPreview?.amount || 0) - Number(form.paidAmount || 0), 0) : 0;
+  const selectedSalaryEmployee = modal === "salary" ? data.employees.find((item) => item._id === form.employee) : null;
   const studentFeeAutoPreview = modal === "payment" ? getStudentFeeAutoValues(form.student, form.feeType, form.billingMonth, form.term) : null;
   const studentFeeDuePreview = modal === "payment" ? Math.max(Number(form.amount || studentFeeAutoPreview?.amount || 0) - Number(form.paidAmount || 0), 0) : 0;
 
@@ -3551,7 +4100,13 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
                 onClick={handleBiometricScan}
                 disabled={!biometricEmployee || biometricScanning}
                 className={`w-full rounded-xl py-4 flex flex-col items-center gap-2 transition-all font-medium
-                  ${biometricScanning ? "bg-violet-700 opacity-80 cursor-wait" : !biometricEmployee ? "bg-slate-700 cursor-not-allowed opacity-50" : "bg-violet-600 hover:bg-violet-500 active:scale-95 shadow-lg shadow-violet-900/40"}`}
+                  ${biometricScanning ? "opacity-80 cursor-wait" : !biometricEmployee ? "bg-slate-700 cursor-not-allowed opacity-50" : "active:scale-95"}`}
+                style={!biometricEmployee ? {} : {
+                  background: biometricScanning
+                    ? "linear-gradient(135deg, #1d4ed8, #2563eb)"
+                    : "linear-gradient(135deg, #2563eb, #3b82f6)",
+                  boxShadow: "0 8px 24px rgba(37,99,235,0.38)",
+                }}
               >
                 <span className={biometricScanning ? "animate-pulse" : ""}><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 10a2 2 0 0 0-2 2c0 1.02-.1 2.51-.26 3"/><path d="M14 13.12c0 2.38 0 6.38-1 8.88"/><path d="M17.29 21.02c.12-.6.43-2.3.5-3.02"/><path d="M2 12a10 10 0 0 1 18-6"/><path d="M2 17h2"/><path d="M20 17a5 5 0 0 1-5 5"/><path d="M6 10a6 6 0 0 1 11.56-2"/><path d="M9 15a3.5 3.5 0 0 1-.5-1.8"/></svg></span>
                 <span className="text-sm">{biometricScanning ? "Scanning…" : "Tap to Scan Fingerprint"}</span>
@@ -3570,31 +4125,32 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
 
             {/* Today's biometric log */}
             <div className="w-full max-w-2xl">
-              <h3 className="text-sm font-semibold text-slate-700 mb-3">Today's Biometric Log</h3>
-              <div className="biometric-log-wrap bg-white shadow-sm">
+              <h3 style={{ fontSize: "13px", fontWeight: 700, color: "var(--ui-text,#334155)", marginBottom: "10px" }}>Today's Biometric Log</h3>
+              <div className="biometric-log-wrap" style={{ background: "var(--ui-surface,#ffffff)", border: "1px solid var(--edu-border,#e2e8f0)" }}>
                 <table className="min-w-full text-sm">
-                  <thead className="bg-slate-50 text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                  <thead style={{ background: "var(--ui-bg-alt,#f8fafc)", borderBottom: "1px solid var(--edu-border,#e2e8f0)" }}>
                     <tr>
-                      <th className="px-4 py-3 text-left">Employee</th>
-                      <th className="px-4 py-3 text-left">Check-In</th>
-                      <th className="px-4 py-3 text-left">Check-Out</th>
-                      <th className="px-4 py-3 text-left">Status</th>
+                      {["Employee","Check-In","Check-Out","Status"].map(h => (
+                        <th key={h} style={{ padding: "10px 16px", textAlign: "left", fontSize: "10.5px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--ui-muted,#64748b)" }}>{h}</th>
+                      ))}
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100">
+                  <tbody>
                     {(() => {
                       const todayStr = new Date().toISOString().slice(0, 10);
                       const todayRecords = data.attendance.filter(r => {
                         const d = new Date(r.date);
                         return `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,"0")}-${String(d.getUTCDate()).padStart(2,"0")}` === todayStr && r.method === "biometric";
                       });
-                      if (!todayRecords.length) return <tr><td colSpan={4} className="px-4 py-6 text-center text-slate-400">No biometric records for today yet.</td></tr>;
+                      if (!todayRecords.length) return (
+                        <tr><td colSpan={4} style={{ padding: "24px 16px", textAlign: "center", color: "var(--ui-muted,#94a3b8)", fontSize: "13px" }}>No biometric records for today yet.</td></tr>
+                      );
                       return todayRecords.map(r => (
-                        <tr key={r._id} className="hover:bg-slate-50">
-                          <td className="px-4 py-3 font-medium text-slate-800">{r.employee?.name || "—"}</td>
-                          <td className="px-4 py-3 text-slate-700">{r.checkIn || "—"}</td>
-                          <td className="px-4 py-3 text-slate-700">{r.checkOut || <span className="text-slate-300">—</span>}</td>
-                          <td className="px-4 py-3"><span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold capitalize ${ATTENDANCE_STATUS_COLOR[r.status] || "bg-slate-100 text-slate-600"}`}>{r.status}</span></td>
+                        <tr key={r._id} style={{ borderBottom: "1px solid var(--edu-border,#e2e8f0)" }}>
+                          <td style={{ padding: "10px 16px", fontWeight: 600, color: "var(--ui-text,#1e293b)" }}>{r.employee?.name || "—"}</td>
+                          <td style={{ padding: "10px 16px", color: "var(--ui-text,#334155)" }}>{r.checkIn || "—"}</td>
+                          <td style={{ padding: "10px 16px", color: "var(--ui-muted,#64748b)" }}>{r.checkOut || "—"}</td>
+                          <td style={{ padding: "10px 16px" }}><span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold capitalize ${ATTENDANCE_STATUS_COLOR[r.status] || "bg-slate-100 text-slate-600"}`}>{r.status}</span></td>
                         </tr>
                       ));
                     })()}
@@ -3817,47 +4373,281 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
       {activeView === "routines" && renderRoutines()}
       {activeView === "salaries" && renderSalaries()}
       {activeView === "reports" && renderReports()}
-      {activeView === "settings" && renderSettings()}
+      {activeView === "settings" && user.role !== "student" && renderSettings()}
+      {activeView === "teachers" && user.role === "student" && renderTeachers()}
+      {activeView === "academicCalendar" && renderAcademicCalendar()}
 
-      {profileStudent && (
-        <Modal title="Student Full Profile" onClose={() => setProfileStudent(null)}>
-          <div className="profile-grid">
-            <div className="info-card">
-              <h3>{profileStudent.name}</h3>
-              <p><strong>Class:</strong> {profileStudent.className}</p>
-              <p><strong>Roll:</strong> {profileStudent.rollNumber}</p>
-              <p><strong>Guardian:</strong> {profileStudent.contactInfo?.guardianName || "Not set"}</p>
-              <p><strong>Phone:</strong> {profileStudent.contactInfo?.phone || "Not set"}</p>
-              <p><strong>Email:</strong> {profileStudent.contactInfo?.email || "Not set"}</p>
-              <p><strong>Date of Birth:</strong> {profileStudent.dateOfBirth ? toDateInput(profileStudent.dateOfBirth) : "Not set"}</p>
-              <p><strong>Admission Date:</strong> {profileStudent.admissionDate ? toDateInput(profileStudent.admissionDate) : "Not set"}</p>
-              <p><strong>Address:</strong> {profileStudent.contactInfo?.address || "Not set"}</p>
-              <p><strong>Total Due:</strong> {money.format(profileStudent.dueAmount || 0)}</p>
+      {profileStudent && (() => {
+        const classColors = { "Play": "#7c3aed", "Nursery": "#0891b2", "KG": "#0d9488", "Class 1": "#2563eb", "Class 2": "#7c3aed", "Class 3": "#059669", "Class 4": "#d97706", "Class 5": "#dc2626", "Class 6": "#4f46e5", "Class 7": "#0891b2", "Class 8": "#0d9488" };
+        const avatarBg = classColors[profileStudent.className] || "#2563eb";
+        const initials = String(profileStudent.name || "S").split(" ").filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase()).join("");
+        const totalPaid = selectedProfilePayments.reduce((s, p) => s + (p.paidAmount || 0), 0);
+        const totalDue = profileStudent.dueAmount || selectedProfilePayments.reduce((s, p) => s + (p.dueAmount || 0), 0);
+        const profileTabs = [
+          { key: "overview", label: "Overview" },
+          { key: "payments", label: `Payments (${selectedProfilePayments.length})` },
+          { key: "marks", label: `Marks (${selectedProfileMarks.length})` },
+          { key: "results", label: `Results (${selectedProfileResults.length})` },
+        ];
+        const infoChips = [
+          { icon: "👤", label: "Guardian", value: profileStudent.contactInfo?.guardianName || profileStudent.guardianName || "—" },
+          { icon: "📞", label: "Phone", value: profileStudent.contactInfo?.phone || profileStudent.phone || "—" },
+          { icon: "✉️", label: "Email", value: profileStudent.contactInfo?.email || profileStudent.email || "—" },
+          { icon: "🎂", label: "Date of Birth", value: profileStudent.dateOfBirth ? toDateInput(profileStudent.dateOfBirth) : "—" },
+          { icon: "📅", label: "Admitted", value: profileStudent.admissionDate ? toDateInput(profileStudent.admissionDate) : "—" },
+          { icon: "🚻", label: "Gender", value: profileStudent.gender ? String(profileStudent.gender).charAt(0).toUpperCase() + String(profileStudent.gender).slice(1) : "—" },
+          { icon: "📍", label: "Address", value: profileStudent.contactInfo?.address || profileStudent.address || "—", wide: true },
+        ];
+        return (
+          <Modal title="" onClose={() => { setProfileStudent(null); setProfileTab("overview"); }}>
+            {/* Profile Header */}
+            <div style={{ margin: "-24px -24px 0", background: `linear-gradient(135deg, ${avatarBg}ee 0%, ${avatarBg}99 100%)`, padding: "28px 28px 22px", borderRadius: "18px 18px 0 0", position: "relative" }}>
+              <div style={{ display: "flex", alignItems: "flex-start", gap: "18px" }}>
+                {/* Avatar */}
+                <div style={{ width: 64, height: 64, borderRadius: "50%", background: "rgba(255,255,255,0.22)", border: "3px solid rgba(255,255,255,0.5)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24, fontWeight: 800, color: "#fff", flexShrink: 0, backdropFilter: "blur(6px)", overflow: "hidden" }}>
+                  {profileStudent.photoUrl
+                    ? <img alt={profileStudent.name} src={profileStudent.photoUrl} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                    : initials}
+                </div>
+                {/* Name + Tags */}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <h2 style={{ margin: 0, fontSize: "20px", fontWeight: 800, color: "#fff", lineHeight: 1.25 }}>{profileStudent.name}</h2>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginTop: "10px" }}>
+                    {profileStudent.className && (
+                      <span style={{ padding: "3px 10px", borderRadius: "999px", background: "rgba(255,255,255,0.18)", color: "#fff", fontSize: "11.5px", fontWeight: 700, border: "1px solid rgba(255,255,255,0.3)" }}>
+                        {profileStudent.className}
+                      </span>
+                    )}
+                    {profileStudent.rollNumber && (
+                      <span style={{ padding: "3px 10px", borderRadius: "999px", background: "rgba(255,255,255,0.18)", color: "#fff", fontSize: "11.5px", fontWeight: 700, border: "1px solid rgba(255,255,255,0.3)" }}>
+                        Roll #{profileStudent.rollNumber}
+                      </span>
+                    )}
+                    {sectionLabel(profileStudent.section) && (
+                      <span style={{ padding: "3px 10px", borderRadius: "999px", background: "rgba(255,255,255,0.18)", color: "#fff", fontSize: "11.5px", fontWeight: 700, border: "1px solid rgba(255,255,255,0.3)" }}>
+                        Section {sectionLabel(profileStudent.section)}
+                      </span>
+                    )}
+                    <span style={{ padding: "3px 10px", borderRadius: "999px", background: profileStudent.status === "active" ? "rgba(134,239,172,0.3)" : "rgba(252,165,165,0.3)", color: "#fff", fontSize: "11.5px", fontWeight: 700, border: "1px solid rgba(255,255,255,0.25)" }}>
+                      {profileStudent.status === "active" ? "● Active" : "● Inactive"}
+                    </span>
+                  </div>
+                </div>
+                {/* Edit button */}
+                {studentWriteAllowed && (() => {
+                  const isAssigned = !currentEmployee?.assignedClass || currentEmployee?.assignedClass === profileStudent.className;
+                  return isAssigned ? (
+                    <button
+                      type="button"
+                      onClick={() => { setProfileStudent(null); openModal("student", profileStudent); }}
+                      style={{ flexShrink: 0, padding: "8px 16px", borderRadius: "10px", background: "rgba(255,255,255,0.18)", color: "#fff", border: "1.5px solid rgba(255,255,255,0.35)", fontSize: "13px", fontWeight: 700, cursor: "pointer", backdropFilter: "blur(4px)" }}
+                    >
+                      Edit
+                    </button>
+                  ) : null;
+                })()}
+              </div>
+              {/* Due banner */}
+              {totalDue > 0 && (
+                <div className="profile-due-banner">
+                  <span className="profile-due-label">
+                    <span className="profile-due-icon"><DashboardIcon name="alertCircle" /></span>
+                    <span>
+                      <strong>Outstanding Dues</strong>
+                      <small>Payment pending for this student</small>
+                    </span>
+                  </span>
+                  <span className="profile-due-amount">{money.format(totalDue)}</span>
+                </div>
+              )}
+              {totalDue > Number.MAX_SAFE_INTEGER && (
+                <div style={{ marginTop: "14px", padding: "9px 14px", borderRadius: "10px", background: "rgba(254,202,202,0.2)", border: "1px solid rgba(255,255,255,0.25)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px" }}>
+                  <span style={{ color: "#fff", fontSize: "13px", fontWeight: 600 }}>⚠️ Outstanding Dues</span>
+                  <span style={{ color: "#fff", fontSize: "15px", fontWeight: 800 }}>{money.format(totalDue)}</span>
+                </div>
+              )}
             </div>
-            <div className="info-card">
-              <h3>Due Payments</h3>
-              {selectedProfilePayments.length ? selectedProfilePayments.map((payment) => (
-                <p key={payment._id}>{payment.feeType} {payment.billingMonth || payment.term}: due {money.format(payment.dueAmount || 0)}</p>
-              )) : <p>No payment records.</p>}
+
+            {/* Info chips grid */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: "10px", padding: "18px 0 4px" }}>
+              {infoChips.map((chip) => (
+                <div key={chip.label} style={{ gridColumn: chip.wide ? "1 / -1" : undefined, background: "var(--app-surface-2,#f8fafc)", border: "1px solid var(--app-border,#e2e8f0)", borderRadius: "10px", padding: "10px 14px", display: "flex", flexDirection: "column", gap: "2px" }}>
+                  <span style={{ fontSize: "10.5px", fontWeight: 600, color: "var(--app-muted,#64748b)", textTransform: "uppercase", letterSpacing: "0.07em" }}>{chip.icon} {chip.label}</span>
+                  <span style={{ fontSize: "13px", fontWeight: 500, color: "var(--app-text,#1e293b)", wordBreak: "break-word" }}>{chip.value}</span>
+                </div>
+              ))}
             </div>
-            <div className="info-card full-span">
-              <h3>Marks</h3>
-              {selectedProfileMarks.length ? selectedProfileMarks.map((mark) => (
-                <p key={mark._id}>{mark.subject} - {mark.examType.replace("_", " ")} #{mark.examNo}: {mark.obtainedMarks}/{mark.totalMarks}, weighted contribution {mark.weightedScore}%</p>
-              )) : <p>No mark records.</p>}
+
+            {/* Tabs */}
+            <div style={{ display: "flex", gap: "4px", marginTop: "14px", borderBottom: "2px solid var(--edu-border,#e2e8f0)", paddingBottom: "0" }}>
+              {profileTabs.map((tab) => (
+                <button
+                  key={tab.key}
+                  type="button"
+                  onClick={() => setProfileTab(tab.key)}
+                  style={{ padding: "8px 14px", fontSize: "13px", fontWeight: 700, borderRadius: "8px 8px 0 0", border: "none", cursor: "pointer", background: profileTab === tab.key ? "var(--edu-primary,#2563eb)" : "transparent", color: profileTab === tab.key ? "#fff" : "var(--ui-muted,#64748b)", marginBottom: "-2px", borderBottom: profileTab === tab.key ? "2px solid var(--edu-primary,#2563eb)" : "2px solid transparent", transition: "all .15s" }}
+                >
+                  {tab.label}
+                </button>
+              ))}
             </div>
-            <div className="info-card full-span">
-              <h3>Final Results</h3>
-              {selectedProfileResults.length ? selectedProfileResults.map((result) => (
-                <p key={result.id}>{result.subject} {result.academicYear}: <strong>{result.finalResultPercent}%</strong> <GradeBadge grade={result.grade} /> <ResultStatus status={result.resultStatus} /></p>
-              )) : <p>No final result summary yet.</p>}
+
+            {/* Tab content */}
+            <div style={{ paddingTop: "18px", minHeight: "160px" }}>
+
+              {/* OVERVIEW TAB */}
+              {profileTab === "overview" && (
+                <div>
+                  {/* Stat cards */}
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(130px,1fr))", gap: "10px", marginBottom: "20px" }}>
+                    {[
+                      { label: "Payments",    value: selectedProfilePayments.length, color: "var(--app-primary,#2563eb)",  bg: "color-mix(in srgb,var(--app-primary) 12%,var(--app-surface-2,#f8fafc))" },
+                      { label: "Total Paid",  value: money.format(totalPaid),         color: "var(--app-success,#059669)",  bg: "color-mix(in srgb,var(--app-success) 12%,var(--app-surface-2,#f8fafc))" },
+                      { label: "Total Due",   value: money.format(totalDue),          color: totalDue > 0 ? "var(--app-danger,#dc2626)" : "var(--app-success,#059669)", bg: totalDue > 0 ? "color-mix(in srgb,var(--app-danger) 12%,var(--app-surface-2,#f8fafc))" : "color-mix(in srgb,var(--app-success) 12%,var(--app-surface-2,#f8fafc))" },
+                      { label: "Mark Entries",value: selectedProfileMarks.length,     color: "var(--app-violet,#7c3aed)",  bg: "color-mix(in srgb,#7c3aed 12%,var(--app-surface-2,#f8fafc))" },
+                    ].map((stat) => (
+                      <div key={stat.label} style={{ background: stat.bg, borderRadius: "12px", padding: "14px 16px", border: "1px solid var(--app-border,#e2e8f0)", display: "flex", flexDirection: "column", gap: "4px" }}>
+                        <span style={{ fontSize: "10.5px", fontWeight: 600, color: stat.color, textTransform: "uppercase", letterSpacing: "0.07em" }}>{stat.label}</span>
+                        <span style={{ fontSize: "18px", fontWeight: 800, color: stat.color }}>{stat.value}</span>
+                      </div>
+                    ))}
+                  </div>
+                  {/* Recent payments preview */}
+                  {selectedProfilePayments.length > 0 && (
+                    <div>
+                      <p style={{ fontSize: "11.5px", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--ui-muted,#64748b)", marginBottom: "10px" }}>Recent Payments</p>
+                      <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                        {selectedProfilePayments.slice(0, 4).map((pay) => (
+                          <div key={pay._id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px", padding: "10px 14px", background: "var(--app-surface-2,#f8fafc)", borderRadius: "10px", border: "1px solid var(--app-border,#e2e8f0)" }}>
+                            <div>
+                              <p style={{ margin: 0, fontSize: "13px", fontWeight: 500, color: "var(--app-text,#1e293b)" }}>{String(pay.feeType || "Payment").replace("_", " ").replace(/\b\w/g, (l) => l.toUpperCase())}</p>
+                              <p style={{ margin: "2px 0 0", fontSize: "11.5px", color: "var(--app-muted,#64748b)" }}>{pay.billingMonth || pay.term || "—"}</p>
+                            </div>
+                            <div style={{ textAlign: "right" }}>
+                              <p style={{ margin: 0, fontSize: "13px", fontWeight: 700, color: "var(--app-success,#059669)" }}>{money.format(pay.paidAmount || 0)} paid</p>
+                              {(pay.dueAmount || 0) > 0 && <p style={{ margin: "2px 0 0", fontSize: "11.5px", color: "var(--app-danger,#dc2626)", fontWeight: 600 }}>{money.format(pay.dueAmount)} due</p>}
+                            </div>
+                          </div>
+                        ))}
+                        {selectedProfilePayments.length > 4 && (
+                          <button type="button" onClick={() => setProfileTab("payments")} style={{ padding: "8px", background: "none", border: "1px dashed var(--edu-border,#e2e8f0)", borderRadius: "8px", color: "var(--edu-primary,#2563eb)", fontSize: "12px", fontWeight: 700, cursor: "pointer" }}>
+                            View all {selectedProfilePayments.length} payments →
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  {selectedProfilePayments.length === 0 && selectedProfileMarks.length === 0 && (
+                    <p style={{ color: "var(--ui-muted,#64748b)", fontSize: "13px", textAlign: "center", padding: "24px 0" }}>No records found for this student yet.</p>
+                  )}
+                </div>
+              )}
+
+              {/* PAYMENTS TAB */}
+              {profileTab === "payments" && (
+                <div>
+                  {selectedProfilePayments.length === 0 ? (
+                    <p style={{ color: "var(--ui-muted,#64748b)", fontSize: "13px", textAlign: "center", padding: "24px 0" }}>No payment records found.</p>
+                  ) : (
+                    <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                      {selectedProfilePayments.map((pay) => (
+                        <div key={pay._id} style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "12px", alignItems: "center", padding: "12px 16px", background: "var(--app-surface-2,#f8fafc)", borderRadius: "12px", border: "1px solid var(--app-border,#e2e8f0)" }}>
+                          <div>
+                            <p style={{ margin: 0, fontSize: "14px", fontWeight: 500, color: "var(--app-text,#1e293b)" }}>{String(pay.feeType || "Payment").replace("_", " ").replace(/\b\w/g, (l) => l.toUpperCase())}</p>
+                            <div style={{ display: "flex", gap: "10px", marginTop: "4px", flexWrap: "wrap" }}>
+                              {(pay.billingMonth || pay.term) && <span style={{ fontSize: "11.5px", color: "var(--app-muted,#64748b)", fontWeight: 500 }}>{pay.billingMonth || pay.term}</span>}
+                              {pay.note && <span style={{ fontSize: "11.5px", color: "var(--app-muted,#64748b)" }}>{pay.note}</span>}
+                            </div>
+                          </div>
+                          <div style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                            <p style={{ margin: 0, fontSize: "13px", fontWeight: 700, color: "var(--app-success,#059669)" }}>✓ {money.format(pay.paidAmount || 0)}</p>
+                            {(pay.dueAmount || 0) > 0 && <p style={{ margin: "2px 0 0", fontSize: "12px", color: "var(--app-danger,#dc2626)", fontWeight: 600 }}>⚠ {money.format(pay.dueAmount)}</p>}
+                            <p style={{ margin: "2px 0 0", fontSize: "11px", color: "var(--app-muted,#64748b)" }}>of {money.format(pay.amount || 0)}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* MARKS TAB */}
+              {profileTab === "marks" && (
+                <div>
+                  {selectedProfileMarks.length === 0 ? (
+                    <p style={{ color: "var(--ui-muted,#64748b)", fontSize: "13px", textAlign: "center", padding: "24px 0" }}>No mark records found.</p>
+                  ) : (
+                    <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+                      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px", minWidth: "440px" }}>
+                        <thead>
+                          <tr style={{ borderBottom: "2px solid var(--edu-border,#e2e8f0)" }}>
+                            {["Subject", "Exam", "Obtained", "Total", "%", "Grade"].map((h) => (
+                              <th key={h} style={{ padding: "8px 10px", textAlign: "left", fontWeight: 800, color: "var(--ui-muted,#64748b)", fontSize: "10.5px", textTransform: "uppercase", letterSpacing: "0.07em", whiteSpace: "nowrap" }}>{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {selectedProfileMarks.map((mark) => {
+                            const pct = mark.totalMarks ? Number(((mark.obtainedMarks / mark.totalMarks) * 100).toFixed(1)) : 0;
+                            return (
+                              <tr key={mark._id} style={{ borderBottom: "1px solid var(--edu-border,#e2e8f0)" }}>
+                                <td style={{ padding: "10px 10px", color: "var(--app-text,#1e293b)" }}>{mark.subject}</td>
+                                <td style={{ padding: "10px 10px", color: "var(--app-muted,#64748b)", whiteSpace: "nowrap" }}>{String(mark.examType || "").replace("_", " ").replace(/\b\w/g, (l) => l.toUpperCase())} {mark.examNo ? `#${mark.examNo}` : ""}{mark.month ? ` · ${mark.month}` : ""}</td>
+                                <td style={{ padding: "10px 10px", fontWeight: 600, color: "var(--app-primary,#2563eb)" }}>{mark.obtainedMarks}</td>
+                                <td style={{ padding: "10px 10px", color: "var(--app-muted,#64748b)" }}>{mark.totalMarks}</td>
+                                <td style={{ padding: "10px 10px", fontWeight: 600, color: pct >= 50 ? "var(--app-success,#059669)" : pct >= 33 ? "var(--app-warning,#d97706)" : "var(--app-danger,#dc2626)" }}>{pct}%</td>
+                                <td style={{ padding: "10px 10px" }}><GradeBadge grade={gradeFromPercentClient(pct)} /></td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* RESULTS TAB */}
+              {profileTab === "results" && (
+                <div>
+                  {selectedProfileResults.length === 0 ? (
+                    <p style={{ color: "var(--ui-muted,#64748b)", fontSize: "13px", textAlign: "center", padding: "24px 0" }}>No final result summary yet.</p>
+                  ) : (
+                    <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                      {selectedProfileResults.map((result) => {
+                        const pct = Number(result.finalResultPercent || 0);
+                        const barColor = pct >= 70 ? "var(--app-success,#059669)" : pct >= 50 ? "var(--app-primary,#2563eb)" : pct >= 33 ? "var(--app-warning,#d97706)" : "var(--app-danger,#dc2626)";
+                        return (
+                          <div key={result._id || result.id} style={{ padding: "14px 16px", background: "var(--app-surface-2,#f8fafc)", borderRadius: "12px", border: "1px solid var(--app-border,#e2e8f0)" }}>
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
+                              <div>
+                                <p style={{ margin: 0, fontSize: "14px", fontWeight: 600, color: "var(--app-text,#1e293b)" }}>{result.subject}</p>
+                                <p style={{ margin: "3px 0 0", fontSize: "11.5px", color: "var(--app-muted,#64748b)", fontWeight: 500 }}>{result.academicYear} · {result.examType ? String(result.examType).replace("_", " ").replace(/\b\w/g, (l) => l.toUpperCase()) : ""}</p>
+                              </div>
+                              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                                <span style={{ fontSize: "22px", fontWeight: 900, color: barColor }}>{pct}%</span>
+                                <GradeBadge grade={result.grade} />
+                                <ResultStatus status={result.resultStatus} />
+                              </div>
+                            </div>
+                            {/* Progress bar */}
+                            <div style={{ marginTop: "10px", height: "6px", background: "var(--app-border,#e2e8f0)", borderRadius: "99px", overflow: "hidden" }}>
+                              <div style={{ height: "100%", width: `${Math.min(pct, 100)}%`, background: barColor, borderRadius: "99px", transition: "width .4s ease" }} />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
-          </div>
-        </Modal>
-      )}
+          </Modal>
+        );
+      })()}
 
       {modal && modal !== "attendance" && (
-        <Modal title={modalTitle} onClose={() => { setModal(null); setEditingId(""); }}>
+        <Modal title={modalTitle} narrow={modal === "mark" && !editingId} wide={modal === "student"} onClose={() => { setModal(null); setEditingId(""); }}>
           <form className="modal-form" onSubmit={handleSubmit}>
             <datalist id="classes">{classNames.map((name) => <option key={name} value={name} />)}</datalist>
             <datalist id="subjects">{subjectOptionsForForm.map((subject) => <option key={subject} value={subject} />)}</datalist>
@@ -3875,44 +4665,170 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
               </div>
             )}
 
-            {modal === "student" && (
-              <div className="form-grid">
-                <Field label="Name"><input className="control" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required /></Field>
-                <Field label="Class">
-                  <select className="control" value={form.classFee} onChange={(e) => setForm({ ...form, classFee: e.target.value, section: "" })} required>
-                    <option value="">Select class</option>
-                    {data.classFees.map((item) => <option key={item._id} value={item._id}>{item.className}</option>)}
-                  </select>
-                </Field>
-                <Field label="Section">
-                  <select className="control" value={form.section} onChange={(e) => setForm({ ...form, section: e.target.value })}>
-                    <option value="">No section</option>
-                    {data.sections
-                      .filter((s) => {
-                        const cf = data.classFees.find((f) => f._id === form.classFee);
-                        return cf && s.className === cf.className;
-                      })
-                      .map((s) => <option key={s._id} value={s._id}>{s.sectionName}</option>)}
-                  </select>
-                </Field>
-                <Field label="Gender">
-                  <select className="control" value={form.gender} onChange={(e) => setForm({ ...form, gender: e.target.value })}>
-                    <option value="">Not specified</option>
-                    <option value="male">Male</option>
-                    <option value="female">Female</option>
-                    <option value="other">Other</option>
-                  </select>
-                </Field>
-                <Field label="Roll / ID"><input className="control" value={form.rollNumber} onChange={(e) => setForm({ ...form, rollNumber: e.target.value })} required /></Field>
-                <Field label="Guardian"><input className="control" value={form.guardianName} onChange={(e) => setForm({ ...form, guardianName: e.target.value })} /></Field>
-                <Field label="Phone"><input className="control" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></Field>
-                <Field label="Email"><input className="control" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></Field>
-                <Field label="Date of Birth"><input className="control" type="date" value={form.dateOfBirth} onChange={(e) => setForm({ ...form, dateOfBirth: e.target.value })} /></Field>
-                <Field label="Admission Date"><input className="control" type="date" value={form.admissionDate} onChange={(e) => setForm({ ...form, admissionDate: e.target.value })} /></Field>
-                <Field label="Status"><select className="control" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}><option value="active">Active</option><option value="inactive">Inactive</option></select></Field>
-                <Field label="Address"><textarea className="control" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} /></Field>
-              </div>
-            )}
+            {modal === "student" && (() => {
+              const selectedClassFee = data.classFees.find((f) => f._id === form.classFee);
+              const selectedClassName = selectedClassFee?.className || "";
+              const isTeacher = user.role === "teacher";
+
+              // Sections for selected class, enriched with student counts
+              const classSections = data.sections.filter((s) => s.className === selectedClassName);
+              const studentCountBySection = {};
+              data.students.forEach((s) => {
+                const sid = String(s.section?._id || s.section || "");
+                if (sid) studentCountBySection[sid] = (studentCountBySection[sid] || 0) + 1;
+              });
+
+              // All class fees available to everyone (teachers can add to any class)
+              const availableClassFees = data.classFees;
+
+              return (
+                <div style={{ display: "flex", flexDirection: "column", gap: "22px" }}>
+
+                  {/* ── Class & Section banner ── */}
+                  <div style={{ background: "var(--edu-bg-alt,#f8fafc)", border: "1.5px solid var(--edu-border,#e2e8f0)", borderRadius: "16px", padding: "18px 20px" }}>
+                    <p style={{ margin: "0 0 14px", fontSize: "11px", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.09em", color: "#2563eb" }}>Class &amp; Section</p>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: "14px" }}>
+
+                      {/* Class selector */}
+                      <div>
+                        <label style={{ display: "block", fontSize: "12px", fontWeight: 700, color: "var(--ui-text,#374151)", marginBottom: "6px" }}>
+                          Class <span style={{ color: "#dc2626" }}>*</span>
+                        </label>
+                        <select
+                          className="control"
+                          value={form.classFee}
+                          required
+                          onChange={(e) => {
+                            const newClassFeeId = e.target.value;
+                            const classFeeObj = data.classFees.find((f) => f._id === newClassFeeId);
+                            const className = classFeeObj?.className || "";
+                            // Auto-generate roll number only when adding a new student
+                            let nextRoll = form.rollNumber;
+                            if (!editingId && className) {
+                              const rolls = data.students
+                                .filter((s) => s.className === className)
+                                .map((s) => parseInt(s.rollNumber, 10))
+                                .filter((n) => !isNaN(n) && n > 0);
+                              const max = rolls.length > 0 ? Math.max(...rolls) : 0;
+                              nextRoll = String(max + 1).padStart(2, "0");
+                            }
+                            setForm({ ...form, classFee: newClassFeeId, section: "", rollNumber: nextRoll });
+                          }}
+                        >
+                          <option value="">— Select class —</option>
+                          {availableClassFees.map((item) => (
+                            <option key={item._id} value={item._id}>{item.className}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Section selector */}
+                      <div>
+                        <label style={{ display: "block", fontSize: "12px", fontWeight: 700, color: "var(--ui-text,#374151)", marginBottom: "6px" }}>Section</label>
+                        <select
+                          className="control"
+                          value={form.section}
+                          onChange={(e) => setForm({ ...form, section: e.target.value })}
+                          disabled={!selectedClassName}
+                        >
+                          <option value="">{selectedClassName ? "No section / General" : "Select a class first"}</option>
+                          {classSections.map((s) => {
+                            const enrolled = studentCountBySection[String(s._id)] || 0;
+                            const teacher = s.classTeacher?.name ? ` · ${s.classTeacher.name}` : "";
+                            return (
+                              <option key={s._id} value={s._id}>
+                                {s.sectionName} — {enrolled} student{enrolled !== 1 ? "s" : ""}{teacher}
+                              </option>
+                            );
+                          })}
+                        </select>
+                        {form.section && (() => {
+                          const sec = classSections.find((s) => s._id === form.section);
+                          const enrolled = sec ? (studentCountBySection[String(sec._id)] || 0) : 0;
+                          return sec ? (
+                            <small style={{ display: "block", marginTop: "5px", color: "#059669", fontSize: "11.5px", fontWeight: 600 }}>
+                              ✓ {sec.sectionName} · {enrolled} enrolled{sec.classTeacher?.name ? ` · Class teacher: ${sec.classTeacher.name}` : ""}
+                            </small>
+                          ) : null;
+                        })()}
+                        {!form.section && classSections.length > 0 && (
+                          <small style={{ display: "block", marginTop: "5px", color: "#64748b", fontSize: "11.5px" }}>
+                            {classSections.length} section{classSections.length !== 1 ? "s" : ""} available in {selectedClassName}
+                          </small>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* ── Identity row ── */}
+                  <div>
+                    <p style={{ margin: "0 0 12px", fontSize: "11px", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.09em", color: "var(--ui-muted,#64748b)" }}>Student Identity</p>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: "14px" }}>
+                      <div style={{ gridColumn: "span 2" }}>
+                        <label style={{ display: "block", fontSize: "12px", fontWeight: 700, color: "var(--ui-text,#374151)", marginBottom: "6px" }}>Full Name <span style={{ color: "#dc2626" }}>*</span></label>
+                        <input className="control" value={form.name} placeholder="Student full name" onChange={(e) => setForm({ ...form, name: e.target.value })} required />
+                      </div>
+                      <div>
+                        <label style={{ display: "block", fontSize: "12px", fontWeight: 700, color: "var(--ui-text,#374151)", marginBottom: "6px" }}>Roll / ID <span style={{ color: "#dc2626" }}>*</span></label>
+                        <input className="control" value={form.rollNumber} placeholder="Auto from class" onChange={(e) => setForm({ ...form, rollNumber: e.target.value })} required />
+                        {!editingId && form.classFee && form.rollNumber && (
+                          <small style={{ display: "block", marginTop: "5px", color: "#2563eb", fontSize: "11.5px", fontWeight: 600 }}>
+                            ✦ Auto-generated · you can change it
+                          </small>
+                        )}
+                      </div>
+                      <div>
+                        <label style={{ display: "block", fontSize: "12px", fontWeight: 700, color: "var(--ui-text,#374151)", marginBottom: "6px" }}>Gender</label>
+                        <select className="control" value={form.gender} onChange={(e) => setForm({ ...form, gender: e.target.value })}>
+                          <option value="">Not specified</option>
+                          <option value="male">Male</option>
+                          <option value="female">Female</option>
+                          <option value="other">Other</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label style={{ display: "block", fontSize: "12px", fontWeight: 700, color: "var(--ui-text,#374151)", marginBottom: "6px" }}>Date of Birth</label>
+                        <input className="control" type="date" value={form.dateOfBirth} onChange={(e) => setForm({ ...form, dateOfBirth: e.target.value })} />
+                      </div>
+                      <div>
+                        <label style={{ display: "block", fontSize: "12px", fontWeight: 700, color: "var(--ui-text,#374151)", marginBottom: "6px" }}>Admission Date</label>
+                        <input className="control" type="date" value={form.admissionDate} onChange={(e) => setForm({ ...form, admissionDate: e.target.value })} />
+                      </div>
+                      <div>
+                        <label style={{ display: "block", fontSize: "12px", fontWeight: 700, color: "var(--ui-text,#374151)", marginBottom: "6px" }}>Status</label>
+                        <select className="control" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
+                          <option value="active">Active</option>
+                          <option value="inactive">Inactive</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* ── Contact / Guardian ── */}
+                  <div>
+                    <p style={{ margin: "0 0 12px", fontSize: "11px", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.09em", color: "var(--ui-muted,#64748b)" }}>Guardian &amp; Contact</p>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: "14px" }}>
+                      <div style={{ gridColumn: "span 2" }}>
+                        <label style={{ display: "block", fontSize: "12px", fontWeight: 700, color: "var(--ui-text,#374151)", marginBottom: "6px" }}>Guardian Name</label>
+                        <input className="control" value={form.guardianName} placeholder="Father / Mother / Guardian" onChange={(e) => setForm({ ...form, guardianName: e.target.value })} />
+                      </div>
+                      <div>
+                        <label style={{ display: "block", fontSize: "12px", fontWeight: 700, color: "var(--ui-text,#374151)", marginBottom: "6px" }}>Phone</label>
+                        <input className="control" value={form.phone} placeholder="+880…" onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+                      </div>
+                      <div>
+                        <label style={{ display: "block", fontSize: "12px", fontWeight: 700, color: "var(--ui-text,#374151)", marginBottom: "6px" }}>Email</label>
+                        <input className="control" type="email" value={form.email} placeholder="student@email.com" onChange={(e) => setForm({ ...form, email: e.target.value })} />
+                      </div>
+                      <div style={{ gridColumn: "1 / -1" }}>
+                        <label style={{ display: "block", fontSize: "12px", fontWeight: 700, color: "var(--ui-text,#374151)", marginBottom: "6px" }}>Address</label>
+                        <textarea className="control" value={form.address} placeholder="Full home address" style={{ minHeight: "72px" }} onChange={(e) => setForm({ ...form, address: e.target.value })} />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
 
             {modal === "payment" && (
               <div className="form-grid">
@@ -3963,33 +4879,252 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
               <div className="form-grid">
                 <Field label="Employee"><select className="control" value={form.employee} onChange={(e) => {
                   const auto = getSalaryAutoValues(e.target.value, form.salaryMonth);
-                  setForm({ ...form, employee: e.target.value, amount: auto.amount, paidAmount: auto.paidAmount });
+                  setForm({ ...form, employee: e.target.value, amount: auto.amount, bonusAmount: auto.bonusAmount, paidAmount: auto.paidAmount });
                 }} required><option value="">Select employee</option>{data.employees.map((item) => <option key={item._id} value={item._id}>{item.name}</option>)}</select></Field>
                 <Field label="Salary Month"><input className="control" type="month" value={form.salaryMonth} onChange={(e) => {
                   const auto = getSalaryAutoValues(form.employee, e.target.value);
-                  setForm({ ...form, salaryMonth: e.target.value, amount: auto.amount, paidAmount: auto.paidAmount });
+                  setForm({ ...form, salaryMonth: e.target.value, amount: auto.amount, bonusAmount: auto.bonusAmount, paidAmount: auto.paidAmount });
                 }} /></Field>
-                <Field label="Amount"><input className="control" min="0" type="number" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} /></Field>
+                <Field label="Base + Bonus Total"><input className="control" min="0" type="number" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} /></Field>
+                <Field label="Bonus Amount" hint={selectedSalaryEmployee ? `Base salary: ${money.format(selectedSalaryEmployee.salaryAmount || 0)}` : "Optional employee bonus for this month"}>
+                  <input className="control" min="0" type="number" value={form.bonusAmount || 0} onChange={(e) => {
+                    const bonusAmount = e.target.value;
+                    const baseAmount = Number(selectedSalaryEmployee?.salaryAmount || salaryAutoPreview?.amount || 0);
+                    setForm({ ...form, bonusAmount, amount: Number(baseAmount) + Number(bonusAmount || 0) });
+                  }} />
+                </Field>
                 <Field label="Paid Amount"><input className="control" min="0" type="number" value={form.paidAmount} onChange={(e) => setForm({ ...form, paidAmount: e.target.value })} /></Field>
-                <div className="info-card compact-info"><strong>Due Payment:</strong> {money.format(salaryDuePreview)} <small>Previous due: {money.format(salaryAutoPreview?.dueAmount || 0)}</small></div>
+                <div className="info-card compact-info"><strong>Due Payment:</strong> {money.format(salaryDuePreview)} <small>Bonus: {money.format(form.bonusAmount || 0)} - Previous due: {money.format(salaryAutoPreview?.dueAmount || 0)}</small></div>
                 <Field label="Note"><input className="control" value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} /></Field>
               </div>
             )}
 
-            {modal === "mark" && (
+            {modal === "mark" && editingId && (
+              /* ── Single-mark EDIT form (unchanged) ── */
               <div className="form-grid">
                 <Field label="Student"><select className="control" value={form.student} onChange={(e) => setForm({ ...form, student: e.target.value })} required><option value="">Select student</option>{markEntryStudents.map((item) => <option key={item._id} value={item._id}>{item.name} - {item.className}</option>)}</select></Field>
                 <Field label="Subject"><input className="control" list="subjects" value={form.subject} onChange={(e) => setForm({ ...form, subject: e.target.value })} required /></Field>
                 <Field label="Academic Year"><input className="control" min="2000" type="number" value={form.academicYear} onChange={(e) => setForm({ ...form, academicYear: e.target.value })} /></Field>
                 <Field label="Exam Type"><select className="control" value={form.examType} onChange={(e) => setForm({ ...form, examType: e.target.value, examNo: 1 })}><option value="monthly">Monthly Exam</option><option value="semester">Semester Exam</option><option value="class_test">Class Test</option></select></Field>
-                <Field label="Exam Number" hint="Monthly: 1-12, Semester: 1-3, Class test: 1-2 per month"><input className="control" min="1" type="number" value={form.examNo} onChange={(e) => setForm({ ...form, examNo: e.target.value })} /></Field>
-                <Field label="Month" hint="Required for class tests"><input className="control" type="month" value={form.month} onChange={(e) => setForm({ ...form, month: e.target.value })} /></Field>
+                <Field label="Exam Number"><input className="control" min="1" type="number" value={form.examNo} onChange={(e) => setForm({ ...form, examNo: e.target.value })} /></Field>
+                <Field label="Month"><input className="control" type="month" value={form.month} onChange={(e) => setForm({ ...form, month: e.target.value })} /></Field>
                 <Field label="Total Marks"><input className="control" min="1" type="number" value={form.totalMarks} onChange={(e) => setForm({ ...form, totalMarks: e.target.value })} required /></Field>
                 <Field label="Obtained Marks"><input className="control" min="0" type="number" value={form.obtainedMarks} onChange={(e) => setForm({ ...form, obtainedMarks: e.target.value })} required /></Field>
-                <Field label="Final Result Contribution %"><input className="control" min="0" max="100" type="number" value={form.contributionPercent} onChange={(e) => setForm({ ...form, contributionPercent: e.target.value })} /></Field>
+                <Field label="Contribution %"><input className="control" min="0" max="100" type="number" value={form.contributionPercent} onChange={(e) => setForm({ ...form, contributionPercent: e.target.value })} /></Field>
                 <Field label="Note"><input className="control" value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} /></Field>
               </div>
             )}
+
+            {modal === "mark" && !editingId && (() => {
+              /* ── New bulk mark entry ── */
+              const selStudent = markEntryStudents.find((s) => s._id === form.student);
+              const enabledCount = markBulkRows.filter((r) => r.enabled && r.obtainedMarks !== "").length;
+              const examTypeLabel = { monthly: "Monthly Exam", semester: "Semester Exam", class_test: "Class Test" }[form.examType] || "Exam";
+
+              // Build class list (ordered by academicClassOptions) that actually have students
+              const availableClasses = user.role !== "teacher"
+                ? academicClassOptions
+                    .map((c) => c.className)
+                    .filter((cn) => markEntryStudentsBase.some((s) => s.className === cn))
+                : [];
+
+              return (
+                <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+
+                  {/* ── Class picker (admin / non-teacher) — dropdown ── */}
+                  {user.role !== "teacher" && availableClasses.length > 0 && (
+                    <div style={{ marginBottom: "16px" }}>
+                      <label style={{ display: "block", fontSize: "11.5px", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.07em", color: "var(--ui-muted,#64748b)", marginBottom: "7px" }}>
+                        Select Class
+                      </label>
+                      <select
+                        className="control"
+                        value={markEntryClass}
+                        onChange={(e) => { setMarkEntryClass(e.target.value); setForm((f) => ({ ...f, student: "" })); }}
+                        style={{ width: "100%", fontSize: "14px", fontWeight: 600, borderRadius: "12px", border: `2px solid ${markEntryClass ? "#2563eb" : "var(--edu-border,#e2e8f0)"}`, background: markEntryClass ? "rgba(37,99,235,0.04)" : "var(--ui-surface,#f8fafc)", color: "var(--ui-text,#1e293b)" }}
+                      >
+                        <option value="">— Choose a class —</option>
+                        {availableClasses.map((cn) => {
+                          const count = markEntryStudentsBase.filter((s) => s.className === cn).length;
+                          return <option key={cn} value={cn}>{cn} · {count} student{count !== 1 ? "s" : ""}</option>;
+                        })}
+                      </select>
+                      {markEntryClass && (
+                        <div style={{ marginTop: "6px", display: "flex", gap: "8px", alignItems: "center" }}>
+                          <span style={{ fontSize: "12px", fontWeight: 700, color: "#2563eb" }}>
+                            {markEntryStudentsBase.filter((s) => s.className === markEntryClass).length} students in {markEntryClass}
+                          </span>
+                          <button type="button" onClick={() => { setMarkEntryClass(""); setForm((f) => ({ ...f, student: "" })); }} style={{ fontSize: "11px", color: "var(--ui-muted,#64748b)", background: "none", border: "none", cursor: "pointer", padding: "0 2px", lineHeight: 1 }}>✕ Clear</button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* ── Student picker ── */}
+                  <div style={{ marginBottom: "18px" }}>
+                    <label style={{ display: "block", fontSize: "11.5px", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.07em", color: "var(--ui-muted,#64748b)", marginBottom: "7px" }}>
+                      Student{markEntryClass ? ` — ${markEntryClass}` : ""}
+                    </label>
+                    <select
+                      className="control"
+                      value={form.student}
+                      required
+                      onChange={(e) => setForm({ ...form, student: e.target.value })}
+                      style={{ width: "100%", fontSize: "15px", fontWeight: 600, padding: "12px 14px", borderRadius: "12px", border: "2px solid var(--edu-border,#e2e8f0)", background: "var(--ui-surface,#f8fafc)", color: "var(--ui-text,#1e293b)", appearance: "none" }}
+                    >
+                      <option value="">
+                        {user.role !== "teacher" && !markEntryClass
+                          ? "— Select a class first —"
+                          : "— Choose a student —"}
+                      </option>
+                      {markEntryStudents.map((s) => (
+                        <option key={s._id} value={s._id}>{s.name}{s.rollNumber ? ` · Roll ${s.rollNumber}` : ""}</option>
+                      ))}
+                    </select>
+                    {selStudent && (
+                      <div style={{ marginTop: "8px", display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                        <span style={{ padding: "3px 10px", borderRadius: "999px", background: "#eff6ff", color: "#1d4ed8", fontSize: "12px", fontWeight: 700 }}>{selStudent.className}</span>
+                        {selStudent.rollNumber && <span style={{ padding: "3px 10px", borderRadius: "999px", background: "#f0fdf4", color: "#166534", fontSize: "12px", fontWeight: 700 }}>Roll #{selStudent.rollNumber}</span>}
+                        <span style={{ padding: "3px 10px", borderRadius: "999px", background: "#f5f3ff", color: "#6d28d9", fontSize: "12px", fontWeight: 700 }}>{subjectsForClass(selStudent.className).length} subjects</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* ── Exam config ── */}
+                  <div style={{ background: "var(--ui-surface,#f8fafc)", border: "1.5px solid var(--edu-border,#e2e8f0)", borderRadius: "14px", padding: "16px", marginBottom: "18px", display: "flex", flexDirection: "column", gap: "12px" }}>
+                    <p style={{ margin: 0, fontSize: "11px", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--ui-muted,#64748b)" }}>Exam Configuration</p>
+
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                      <div>
+                        <label style={{ display: "block", fontSize: "11px", fontWeight: 700, color: "var(--ui-muted,#64748b)", marginBottom: "5px" }}>Exam Type</label>
+                        <select className="control" value={form.examType} onChange={(e) => setForm({ ...form, examType: e.target.value, examNo: 1 })} style={{ width: "100%" }}>
+                          <option value="monthly">Monthly Exam</option>
+                          <option value="semester">Semester Exam</option>
+                          <option value="class_test">Class Test</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label style={{ display: "block", fontSize: "11px", fontWeight: 700, color: "var(--ui-muted,#64748b)", marginBottom: "5px" }}>
+                          {form.examType === "monthly" ? "Month No." : form.examType === "semester" ? "Term No." : "Test No."}
+                        </label>
+                        <input className="control" min="1" max={form.examType === "semester" ? 3 : 12} type="number" value={form.examNo} onChange={(e) => setForm({ ...form, examNo: e.target.value })} style={{ width: "100%" }} />
+                      </div>
+                      <div>
+                        <label style={{ display: "block", fontSize: "11px", fontWeight: 700, color: "var(--ui-muted,#64748b)", marginBottom: "5px" }}>Month / Period</label>
+                        <input className="control" type="month" value={form.month} onChange={(e) => setForm({ ...form, month: e.target.value })} style={{ width: "100%" }} />
+                      </div>
+                      <div>
+                        <label style={{ display: "block", fontSize: "11px", fontWeight: 700, color: "var(--ui-muted,#64748b)", marginBottom: "5px" }}>Academic Year</label>
+                        <input className="control" min="2000" max="2099" type="number" value={form.academicYear} onChange={(e) => setForm({ ...form, academicYear: e.target.value })} style={{ width: "100%" }} />
+                      </div>
+                      <div>
+                        <label style={{ display: "block", fontSize: "11px", fontWeight: 700, color: "var(--ui-muted,#64748b)", marginBottom: "5px" }}>Default Total Marks</label>
+                        <input className="control" min="1" type="number" value={form.totalMarks} onChange={(e) => setForm({ ...form, totalMarks: e.target.value })} style={{ width: "100%" }} />
+                      </div>
+                      <div>
+                        <label style={{ display: "block", fontSize: "11px", fontWeight: 700, color: "var(--ui-muted,#64748b)", marginBottom: "5px" }}>Result Contribution %</label>
+                        <input className="control" min="0" max="100" type="number" value={form.contributionPercent} onChange={(e) => setForm({ ...form, contributionPercent: e.target.value })} style={{ width: "100%" }} />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* ── Subject rows ── */}
+                  {markBulkRows.length > 0 && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginBottom: "10px" }}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "4px" }}>
+                        <p style={{ margin: 0, fontSize: "11px", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--ui-muted,#64748b)" }}>
+                          Subjects — {examTypeLabel}
+                        </p>
+                        <span style={{ fontSize: "11.5px", fontWeight: 700, color: enabledCount > 0 ? "#059669" : "var(--ui-muted,#64748b)" }}>
+                          {enabledCount} / {markBulkRows.length} filled
+                        </span>
+                      </div>
+
+                      {/* Column headers */}
+                      <div style={{ display: "grid", gridTemplateColumns: "20px 1fr 70px 70px 60px", gap: "6px", alignItems: "center", padding: "0 4px 4px", borderBottom: "1.5px solid var(--edu-border,#e2e8f0)" }}>
+                        <span />
+                        <span style={{ fontSize: "10.5px", fontWeight: 800, color: "var(--ui-muted,#64748b)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Subject</span>
+                        <span style={{ fontSize: "10.5px", fontWeight: 800, color: "var(--ui-muted,#64748b)", textTransform: "uppercase", letterSpacing: "0.06em", textAlign: "center" }}>Total</span>
+                        <span style={{ fontSize: "10.5px", fontWeight: 800, color: "var(--ui-muted,#64748b)", textTransform: "uppercase", letterSpacing: "0.06em", textAlign: "center" }}>Obtained</span>
+                        <span style={{ fontSize: "10.5px", fontWeight: 800, color: "var(--ui-muted,#64748b)", textTransform: "uppercase", letterSpacing: "0.06em", textAlign: "center" }}>Grade</span>
+                      </div>
+
+                      {markBulkRows.map((row, idx) => {
+                        const pct = (row.totalMarks && row.obtainedMarks !== "") ? Number(((Number(row.obtainedMarks) / Number(row.totalMarks)) * 100).toFixed(1)) : null;
+                        const grade = pct !== null ? gradeFromPercentClient(pct) : "—";
+                        const gradeColor = pct === null ? "var(--ui-muted,#64748b)" : pct >= 70 ? "#059669" : pct >= 50 ? "#2563eb" : pct >= 33 ? "#d97706" : "#dc2626";
+                        const rowBg = !row.enabled ? "rgba(0,0,0,0.02)" : row.obtainedMarks !== "" ? "rgba(5,150,105,0.04)" : "transparent";
+                        return (
+                          <div key={row.subject} style={{ display: "grid", gridTemplateColumns: "20px 1fr 70px 70px 60px", gap: "6px", alignItems: "center", padding: "6px 4px", borderRadius: "8px", background: rowBg, opacity: row.enabled ? 1 : 0.45, transition: "opacity .15s, background .15s" }}>
+                            {/* Toggle */}
+                            <input
+                              type="checkbox"
+                              checked={row.enabled}
+                              onChange={(e) => setMarkBulkRows((prev) => prev.map((r, i) => i === idx ? { ...r, enabled: e.target.checked, obtainedMarks: e.target.checked ? r.obtainedMarks : "" } : r))}
+                              style={{ width: 15, height: 15, accentColor: "#2563eb", cursor: "pointer" }}
+                            />
+                            {/* Subject name */}
+                            <span style={{ fontSize: "13.5px", fontWeight: row.enabled ? 600 : 400, color: "var(--ui-text,#1e293b)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{row.subject}</span>
+                            {/* Total marks */}
+                            <input
+                              type="number"
+                              min="1"
+                              disabled={!row.enabled}
+                              value={row.totalMarks}
+                              onChange={(e) => setMarkBulkRows((prev) => prev.map((r, i) => i === idx ? { ...r, totalMarks: e.target.value } : r))}
+                              style={{ width: "100%", padding: "6px 8px", borderRadius: "8px", border: "1.5px solid var(--edu-border,#e2e8f0)", background: "var(--ui-surface,#f8fafc)", fontSize: "13px", fontWeight: 600, textAlign: "center", color: "var(--ui-text,#1e293b)", outline: "none" }}
+                            />
+                            {/* Obtained marks */}
+                            <input
+                              type="number"
+                              min="0"
+                              max={row.totalMarks}
+                              disabled={!row.enabled}
+                              value={row.obtainedMarks}
+                              placeholder="—"
+                              onChange={(e) => setMarkBulkRows((prev) => prev.map((r, i) => i === idx ? { ...r, obtainedMarks: e.target.value } : r))}
+                              style={{ width: "100%", padding: "6px 8px", borderRadius: "8px", border: `1.5px solid ${row.obtainedMarks !== "" && row.enabled ? "#2563eb" : "var(--edu-border,#e2e8f0)"}`, background: row.obtainedMarks !== "" && row.enabled ? "#eff6ff" : "var(--ui-surface,#f8fafc)", fontSize: "13px", fontWeight: 700, textAlign: "center", color: "#2563eb", outline: "none" }}
+                            />
+                            {/* Grade chip */}
+                            <span style={{ textAlign: "center", fontSize: "12.5px", fontWeight: 800, color: gradeColor, background: pct !== null ? `${gradeColor}14` : "transparent", borderRadius: "6px", padding: "4px 0" }}>
+                              {grade}
+                            </span>
+                          </div>
+                        );
+                      })}
+
+                      {/* Summary bar */}
+                      {enabledCount > 0 && (() => {
+                        const totalObt = markBulkRows.filter((r) => r.enabled && r.obtainedMarks !== "").reduce((s, r) => s + Number(r.obtainedMarks), 0);
+                        const totalMax = markBulkRows.filter((r) => r.enabled && r.obtainedMarks !== "").reduce((s, r) => s + Number(r.totalMarks), 0);
+                        const overallPct = totalMax ? Number(((totalObt / totalMax) * 100).toFixed(1)) : 0;
+                        const overallGrade = gradeFromPercentClient(overallPct);
+                        return (
+                          <div style={{ marginTop: "8px", padding: "10px 14px", borderRadius: "10px", background: "linear-gradient(135deg,#eff6ff,#f5f3ff)", border: "1.5px solid #bfdbfe", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px", flexWrap: "wrap" }}>
+                            <span style={{ fontSize: "12.5px", fontWeight: 700, color: "#1d4ed8" }}>Overall: {totalObt} / {totalMax}</span>
+                            <span style={{ fontSize: "14px", fontWeight: 900, color: "#1d4ed8" }}>{overallPct}% — {overallGrade}</span>
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  )}
+
+                  {!form.student && (
+                    <div style={{ textAlign: "center", padding: "32px 16px 24px", color: "var(--ui-muted,#64748b)" }}>
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" style={{ width: 38, height: 38, margin: "0 auto 10px", display: "block", opacity: 0.38, color: "#2563eb" }}>
+                        <path d="M12 19V5" />
+                        <path d="M5 12l7-7 7 7" />
+                      </svg>
+                      <p style={{ margin: 0, fontSize: "13px", fontWeight: 600, lineHeight: 1.5 }}>
+                        {user.role !== "teacher" && !markEntryClass
+                          ? "Select a class above, then pick a student"
+                          : "Select a student above to load their subjects"}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
 
             {modal === "routine" && (
               <div className="form-grid">
@@ -4259,7 +5394,13 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
 
             <div className="modal-actions">
               <button className="btn soft" type="button" onClick={() => { setModal(null); setEditingId(""); }}>Cancel</button>
-              <button className="btn primary" type="submit">Save</button>
+              <button className="btn primary" type="submit">
+                {(() => {
+                  if (modal !== "mark" || editingId) return "Save";
+                  const n = markBulkRows.filter((r) => r.enabled && r.obtainedMarks !== "").length;
+                  return n > 0 ? `Save ${n} Mark${n !== 1 ? "s" : ""}` : "Save Marks";
+                })()}
+              </button>
             </div>
           </form>
         </Modal>

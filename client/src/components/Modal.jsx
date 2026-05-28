@@ -9,7 +9,7 @@ function CloseIcon() {
   );
 }
 
-export default function Modal({ children, onClose, title }) {
+export default function Modal({ children, onClose, title, narrow = false, wide = false }) {
   useEffect(() => {
     function handleEscape(event) {
       if (event.key === "Escape") onClose();
@@ -21,7 +21,7 @@ export default function Modal({ children, onClose, title }) {
 
   return (
     <div className="modal-backdrop">
-      <section className="modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+      <section className={["modal-card", narrow ? "modal-narrow" : "", wide ? "modal-wide" : ""].filter(Boolean).join(" ")} role="dialog" aria-modal="true" aria-labelledby="modal-title">
         <div className="modal-header">
           <h2 id="modal-title">{title}</h2>
           <button aria-label="Close modal" className="modal-close-btn" type="button" onClick={onClose}>

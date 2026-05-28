@@ -17,22 +17,25 @@ function useIsMobile(breakpoint = 960) {
 // If omitted, item is visible to everyone.
 const FINANCE_ROLES = ["admin", "accounts", "accountant"];
 const OFFICE_ROLES  = ["admin", "accounts", "accountant", "staff"];
+const NON_STUDENT   = ["admin", "accounts", "accountant", "staff", "teacher", "audit"];
 
 const navSections = [
   {
     title: "Main",
     items: [
       { key: "dashboard", label: "Dashboard", icon: "dashboard" },
-      { key: "students", label: "Students", icon: "student" },
+      { key: "students", label: "Students", icon: "student", allowedRoles: NON_STUDENT },
+      { key: "teachers", label: "Teachers", icon: "users", allowedRoles: ["student"] },
       { key: "employees", label: "Employees", icon: "users", allowedRoles: OFFICE_ROLES },
       { key: "attendance", label: "Attendance", icon: "attendance", allowedRoles: OFFICE_ROLES },
       { key: "classTeachers", label: "Class Teachers", icon: "users", allowedRoles: ["admin"] },
       { key: "sections", label: "Sections", icon: "sections", allowedRoles: ["admin"] },
       { key: "classrooms", label: "Classrooms", icon: "classroom", allowedRoles: ["admin"] },
       { key: "marks", label: "Marks", icon: "marks" },
-      { key: "resultCards", label: "Results", icon: "report" },
-      { key: "classwiseResults", label: "Class Results", icon: "classwiseResults" },
+      { key: "resultCards", label: "Results", icon: "report", allowedRoles: ["admin", "accounts", "accountant", "audit"] },
+      { key: "classwiseResults", label: "Class Results", icon: "classwiseResults", allowedRoles: NON_STUDENT },
       { key: "routines", label: "Routine", icon: "calendar" },
+      { key: "academicCalendar", label: "Calendar", icon: "calendarEvent" },
     ],
   },
   {
@@ -42,12 +45,6 @@ const navSections = [
       { key: "expenses", label: "Expenses", icon: "receipt", allowedRoles: FINANCE_ROLES },
       { key: "salaries", label: "Salary", icon: "briefcase", allowedRoles: FINANCE_ROLES },
       { key: "reports", label: "Reports", icon: "chart", allowedRoles: [...FINANCE_ROLES, "audit"] },
-    ],
-  },
-  {
-    title: "System",
-    items: [
-      { key: "settings", label: "Settings", icon: "settings" },
     ],
   },
 ];
@@ -71,6 +68,8 @@ const viewDescriptions = {
   salaries: "Salary payments and increments.",
   reports: "Finance and academic summary.",
   settings: "Profile, appearance, school, and app settings.",
+  academicCalendar: "Monthly calendar view with exam periods, class days, and the academic year.",
+  teachers: "Directory of all teachers — subjects, assigned classes, and contact info.",
 };
 
 function Icon({ name }) {
@@ -83,6 +82,7 @@ function Icon({ name }) {
     marks: <><path d="M6 3.5h9l3 3V20a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4.5a1 1 0 0 1 1-1Z"/><path d="M14 3.5v4h4"/><path d="M8 12h8"/><path d="M8 16h5"/></>,
     report: <><path d="M5 3h14v18H5V3Z"/><path d="M8 7h8"/><path d="M8 11h8"/><path d="M8 15h4"/><path d="M16 15l1.2 1.2L20 13.5"/></>,
     calendar: <><path d="M5 5h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z"/><path d="M8 3v4"/><path d="M16 3v4"/><path d="M3 10h18"/><path d="M8 14h3"/><path d="M14 14h2"/><path d="M8 18h2"/></>,
+    calendarEvent: <><path d="M5 5h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z"/><path d="M8 3v4"/><path d="M16 3v4"/><path d="M3 10h18"/><circle cx="12" cy="15" r="2.5"/><path d="M12 12.5V13"/></>,
     briefcase: <><path d="M9 6V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v1"/><path d="M4 8h16v10a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3V8Z"/><path d="M4 12h16"/><path d="M10 12v2h4v-2"/></>,
     chart: <><path d="M4 19V5"/><path d="M4 19h16"/><path d="M8 16v-5"/><path d="M12 16V8"/><path d="M16 16v-7"/></>,
     settings: <><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.04.04a2 2 0 0 1-2.83 2.83l-.04-.04A1.7 1.7 0 0 0 15 19.37a1.7 1.7 0 0 0-1 1.55V21a2 2 0 0 1-4 0v-.08A1.7 1.7 0 0 0 9 19.37a1.7 1.7 0 0 0-1.88.34l-.04.04a2 2 0 0 1-2.83-2.83l.04-.04A1.7 1.7 0 0 0 4.63 15a1.7 1.7 0 0 0-1.55-1H3a2 2 0 0 1 0-4h.08A1.7 1.7 0 0 0 4.63 9a1.7 1.7 0 0 0-.34-1.88l-.04-.04a2 2 0 0 1 2.83-2.83l.04.04A1.7 1.7 0 0 0 9 4.63a1.7 1.7 0 0 0 1-1.55V3a2 2 0 0 1 4 0v.08A1.7 1.7 0 0 0 15 4.63a1.7 1.7 0 0 0 1.88-.34l.04-.04a2 2 0 0 1 2.83 2.83l-.04.04A1.7 1.7 0 0 0 19.37 9a1.7 1.7 0 0 0 1.55 1H21a2 2 0 0 1 0 4h-.08A1.7 1.7 0 0 0 19.4 15Z"/></>,
@@ -111,6 +111,10 @@ function getInitials(name = "User") {
     .slice(0, 2)
     .map((part) => part[0]?.toUpperCase())
     .join("") || "U";
+}
+
+function canOpenSettings(user) {
+  return NON_STUDENT.includes(user?.role);
 }
 
 function UserAvatar({ user, small = false }) {
@@ -245,42 +249,23 @@ export default function AdminLayout({ activeView, children, onLogout, onOpenUser
         </header>
       )}
 
-      {/* ── Full-width topbar — desktop only ── */}
-      {!isMobile && <header className="erp-topbar clean-topbar">
-        {/* LEFT — user identity */}
-        <div className="topbar-user-info">
-          <UserAvatar user={user} small />
-          <div className="topbar-user-copy">
-            <p className="topbar-greeting">Hello, <strong>{user?.name || "User"}</strong></p>
-            <span className="topbar-role">{user?.role || "user"}</span>
-          </div>
-        </div>
-        {/* RIGHT — controls */}
-        <div className="topbar-actions flex items-center gap-2">
-          <button className="mobile-nav-trigger" type="button" aria-expanded={isMobileMenuOpen} aria-controls="mobile-app-menu" onClick={() => setIsMobileMenuOpen(true)}>
-            <span className="nav-icon"><Icon name="menu" /></span>
-            <span className="mobile-nav-label">{activeItem.label}</span>
-          </button>
-          <button className="topbar-icon-btn" type="button" onClick={() => onThemeChange(theme === "dark" ? "light" : "dark")} title={theme === "dark" ? "Light mode" : "Dark mode"} aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}>
-            <Icon name={theme === "dark" ? "sun" : "moon"} />
-          </button>
-          <div className="user-menu topbar-settings-menu" ref={userMenuRef}>
-            <button className="topbar-icon-btn topbar-settings-btn" type="button" onClick={() => setIsUserMenuOpen((value) => !value)} title="Settings" aria-label="Open settings">
-              <Icon name="settings" />
-            </button>
-            {isUserMenuOpen && (
-              <div className="user-menu-panel overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
-                <button type="button" onClick={() => { setIsUserMenuOpen(false); onOpenUserSettings(); }}><Icon name="user" /> Profile settings</button>
-                <button type="button" onClick={() => { setIsUserMenuOpen(false); handleViewChange("settings"); }}><Icon name="settings" /> App settings</button>
-                <button type="button" onClick={handleLogout}><Icon name="logout" /> Logout</button>
-              </div>
-            )}
-          </div>
-        </div>
-      </header>}
+      {/* Desktop topbar removed — page title shown inside each view's SectionHeader */}
 
-      {/* ── Sidebar — desktop only ── */}
+      {/* ── Sidebar — desktop only, full height ── */}
       {!isMobile && <aside className="erp-sidebar premium-sidebar" ref={sidebarRef}>
+
+        {/* User profile at the top of the sidebar */}
+        <div className="sidebar-user-panel">
+          <button type="button" className="sidebar-avatar-btn" onClick={onOpenUserSettings} title="Profile settings">
+            <UserAvatar user={user} />
+          </button>
+          <div className="sidebar-user-copy">
+            <span>Hello,</span>
+            <strong>{user?.name || "User"}</strong>
+            <small>{user?.role || "user"}</small>
+          </div>
+        </div>
+
         <nav className="sidebar-nav modern-sidebar-nav" aria-label="School modules" ref={sidebarNavRef}>
           {visibleNavSections.map((section) => (
             <div className="nav-section" key={section.title}>
@@ -293,17 +278,40 @@ export default function AdminLayout({ activeView, children, onLogout, onOpenUser
               ))}
             </div>
           ))}
+          <div className="nav-section">
+            <span className="nav-section-title">Appearance</span>
+            <button
+              aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+              className="nav-button"
+              type="button"
+              title={theme === "dark" ? "Light mode" : "Dark mode"}
+              onClick={() => onThemeChange(theme === "dark" ? "light" : "dark")}
+            >
+              <span className="nav-icon"><Icon name={theme === "dark" ? "sun" : "moon"} /></span>
+              <span className="nav-text">{theme === "dark" ? "Light Mode" : "Dark Mode"}</span>
+            </button>
+            <button aria-label="Help" data-label="Help" className="nav-button" type="button" title="Help" onClick={() => handleViewChange(canOpenSettings(user) ? "settings" : "dashboard")}>
+              <span className="nav-icon"><Icon name="help" /></span>
+              <span className="nav-text">Help</span>
+            </button>
+          </div>
         </nav>
 
+        <button aria-label={isCollapsed ? "Expand menu" : "Minimize menu"} className="sidebar-drawer-toggle" type="button" onClick={() => setIsCollapsed((value) => !value)} title={isCollapsed ? "Expand menu" : "Minimize menu"}>
+          <span aria-hidden="true" className="sidebar-drawer-chevron">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="m15 18-6-6 6-6" />
+            </svg>
+          </span>
+        </button>
+
         <div className="sidebar-bottom-actions">
-          <button aria-label={isCollapsed ? "Expand menu" : "Minimize menu"} className="nav-button sidebar-toggle-btn" type="button" onClick={() => setIsCollapsed((value) => !value)} title={isCollapsed ? "Expand menu" : "Minimize menu"}>
-            <span className="nav-icon"><Icon name="collapse" /></span>
-            <span className="nav-text">{isCollapsed ? "Expand menu" : "Minimize"}</span>
-          </button>
-          <button aria-label="Help" data-label="Help" className="nav-button" type="button" title="Help" onClick={() => handleViewChange("settings")}>
-            <span className="nav-icon"><Icon name="help" /></span>
-            <span className="nav-text">Help</span>
-          </button>
+          {canOpenSettings(user) && (
+            <button aria-label="Settings" data-label="Settings" className={activeView === "settings" ? "nav-button active" : "nav-button"} type="button" title="Settings" onClick={() => handleViewChange("settings")}>
+              <span className="nav-icon"><Icon name="settings" /></span>
+              <span className="nav-text">Settings</span>
+            </button>
+          )}
           <button aria-label="Logout" data-label="Logout" className="nav-button logout-nav" type="button" title="Logout" onClick={handleLogout}>
             <span className="nav-icon"><Icon name="logout" /></span>
             <span className="nav-text">Logout</span>
@@ -355,7 +363,7 @@ export default function AdminLayout({ activeView, children, onLogout, onOpenUser
       </aside>
 
       <div className="erp-main">
-        <main className="content-area bg-[radial-gradient(circle_at_top_left,rgba(37,99,235,0.10),transparent_34%),linear-gradient(180deg,#f8fafc,#eef4ff)]">{children}</main>
+        <main className="content-area">{children}</main>
       </div>
     </div>
   );
