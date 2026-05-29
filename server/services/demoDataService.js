@@ -304,20 +304,110 @@ async function ensureDemoData() {
     );
   }
 
-  // ── Class routines ────────────────────────────────────────────────────────
-  const routineRows = [
-    { className: "Class 6", day: "Sunday",  startTime: "09:00", endTime: "09:45", subject: "Mathematics", teacherName: "Demo Teacher",  room: "201" },
-    { className: "Class 6", day: "Sunday",  startTime: "09:50", endTime: "10:35", subject: "English",     teacherName: "Nusrat Jahan",  room: "201" },
-    { className: "Class 6", day: "Monday",  startTime: "09:00", endTime: "09:45", subject: "Science",     teacherName: "Demo Teacher",  room: "202" },
-    { className: "Class 7", day: "Sunday",  startTime: "09:00", endTime: "09:45", subject: "English",     teacherName: "Nusrat Jahan",  room: "301" },
-    { className: "Class 7", day: "Monday",  startTime: "10:00", endTime: "10:45", subject: "Mathematics", teacherName: "Demo Teacher",  room: "301" },
-  ];
-  for (const row of routineRows) {
-    await ClassRoutine.findOneAndUpdate(
-      { className: row.className, day: row.day, startTime: row.startTime, subject: row.subject },
-      { ...row, status: "active", note: "Demo routine", createdBy: adminUser?._id },
-      { new: true, upsert: true, runValidators: true, setDefaultsOnInsert: true },
-    );
+  // ── Class routines — Nursery → Class 12, 6 days × 6 periods ─────────────────
+  {
+    const DAYS = ["Saturday","Sunday","Monday","Tuesday","Wednesday","Thursday"];
+    const PERIODS = [
+      { s:"09:00", e:"09:45" }, { s:"09:50", e:"10:35" },
+      { s:"11:00", e:"11:45" }, { s:"11:50", e:"12:35" },
+      { s:"13:30", e:"14:15" }, { s:"14:20", e:"15:05" },
+    ];
+
+    // Primary (class) teacher per className
+    const PRIMARY = {
+      "Nursery":          "Md. Nazmul Hasan",
+      "KG":               "Md. Jahirul Islam",
+      "Class 1":          "Md. Rafiqul Islam",
+      "Class 2":          "Md. Shahidul Alam",
+      "Class 3":          "Md. Mizanur Rahman",
+      "Class 4":          "Md. Belal Hossain",
+      "Class 5":          "Md. Monir Hossain",
+      "Class 6":          "Demo Teacher",
+      "Class 7":          "Md. Shahabuddin",
+      "Class 8":          "Md. Faruk Hossain",
+      "Class 9 Science":  "Md. Aminul Islam",
+      "Class 9 Arts":     "Demo Teacher",
+      "Class 9 Commerce": "Demo Teacher",
+      "Class 10 Science": "Md. Rezaul Karim",
+      "Class 10 Arts":    "Demo Teacher",
+      "Class 10 Commerce":"Demo Teacher",
+      "Class 11 Science": "Reza Khan",
+      "Class 11 Arts":    "Nusrat Jahan",
+      "Class 11 Commerce":"Demo Teacher",
+      "Class 12 Science": "Reza Khan",
+      "Class 12 Arts":    "Nusrat Jahan",
+      "Class 12 Commerce":"Demo Teacher",
+    };
+
+    // Subject-specific teacher overrides per class
+    const SUBJ_TEACHER = {
+      "Class 6":          { "English":"Nusrat Jahan",       "Bangla":"Nasima Begum",       "Science":"Md. Kamal Uddin" },
+      "Class 7":          { "English":"Nusrat Jahan",       "Bangla":"Rina Akter",         "Science":"Md. Shahabuddin" },
+      "Class 8":          { "English":"Laily Begum",        "Bangla":"Md. Faruk Hossain",  "Mathematics":"Md. Faruk Hossain" },
+      "Class 9 Science":  { "Physics":"Md. Aminul Islam",   "Chemistry":"Shiuly Akter",    "Biology":"Shiuly Akter",    "Mathematics":"Demo Teacher", "English":"Nusrat Jahan" },
+      "Class 10 Science": { "Physics":"Reza Khan",          "Chemistry":"Md. Aminul Islam","Biology":"Mahbuba Khatun",  "Mathematics":"Md. Rezaul Karim", "English":"Nusrat Jahan" },
+      "Class 11 Science": { "Physics":"Reza Khan",          "Chemistry":"Md. Aminul Islam","Biology":"Mahbuba Khatun",  "Higher Mathematics":"Md. Rezaul Karim" },
+      "Class 12 Science": { "Physics":"Reza Khan",          "Chemistry":"Md. Aminul Islam","Biology":"Mahbuba Khatun",  "Higher Mathematics":"Md. Rezaul Karim" },
+      "Class 9 Arts":     { "English":"Nusrat Jahan",       "History":"Md. Shahabuddin" },
+      "Class 10 Arts":    { "English":"Nusrat Jahan",       "History":"Md. Shahabuddin" },
+      "Class 11 Arts":    { "English":"Demo Teacher",       "History":"Md. Shahabuddin" },
+      "Class 12 Arts":    { "English":"Demo Teacher",       "History":"Md. Shahabuddin" },
+      "Class 9 Commerce": { "English":"Nusrat Jahan",       "Accounting":"Demo Teacher" },
+      "Class 10 Commerce":{ "English":"Nusrat Jahan",       "Accounting":"Demo Teacher" },
+    };
+
+    // Classroom per class
+    const ROOM = {
+      "Nursery":"101",          "KG":"102",
+      "Class 1":"103",          "Class 2":"104",
+      "Class 3":"105",          "Class 4":"106",
+      "Class 5":"107",          "Class 6":"201",
+      "Class 7":"202",          "Class 8":"203",
+      "Class 9 Science":"301",  "Class 9 Arts":"302",   "Class 9 Commerce":"303",
+      "Class 10 Science":"304", "Class 10 Arts":"305",  "Class 10 Commerce":"306",
+      "Class 11 Science":"401", "Class 11 Arts":"402",  "Class 11 Commerce":"403",
+      "Class 12 Science":"404", "Class 12 Arts":"405",  "Class 12 Commerce":"406",
+    };
+
+    // Build a non-repeating-per-day subject sequence for a given class
+    function buildWeekSchedule(subjects) {
+      const n = subjects.length;
+      const week = [];
+      for (let d = 0; d < DAYS.length; d++) {
+        const dayRow = [];
+        const used   = new Set();
+        let si       = (d * Math.max(1, Math.floor(n / DAYS.length))) % n;
+        for (let p = 0; p < PERIODS.length; p++) {
+          let attempts = 0;
+          while (used.has(subjects[si % n]) && attempts < n) { si++; attempts++; }
+          const subj = subjects[si % n];
+          dayRow.push(subj);
+          used.add(subj);
+          si++;
+        }
+        week.push(dayRow);
+      }
+      return week;
+    }
+
+    for (const [cls, primary] of Object.entries(PRIMARY)) {
+      const subjects = subjectsForClass(cls);
+      const subjMap  = SUBJ_TEACHER[cls] || {};
+      const room     = ROOM[cls] || "101";
+      const week     = buildWeekSchedule(subjects);
+
+      for (let d = 0; d < DAYS.length; d++) {
+        for (let p = 0; p < PERIODS.length; p++) {
+          const subj    = week[d][p];
+          const teacher = subjMap[subj] || primary;
+          await ClassRoutine.findOneAndUpdate(
+            { className: cls, day: DAYS[d], startTime: PERIODS[p].s, subject: subj },
+            { className: cls, day: DAYS[d], startTime: PERIODS[p].s, endTime: PERIODS[p].e, subject: subj, teacherName: teacher, room, status: "active", note: "Demo routine", createdBy: adminUser?._id },
+            { new: true, upsert: true, runValidators: true, setDefaultsOnInsert: true },
+          );
+        }
+      }
+    }
   }
 
   // ── Exam marks for Class 6 + 7 students ───────────────────────────────────

@@ -140,9 +140,41 @@ async function recordSalaryPayment(payload) {
   return salary;
 }
 
+async function payAllSalaries({ month, note } = {}) {
+  const salaryMonth = month || new Date().toISOString().slice(0, 7);
+  const employees = await Employee.find({ status: "active" });
+  const results = [];
+
+  for (const employee of employees) {
+    const baseAmount = normalizeMoney(employee.salaryAmount);
+    if (baseAmount <= 0) continue;
+
+    const payment = await SalaryPayment.findOneAndUpdate(
+      { employee: employee._id, salaryMonth },
+      {
+        amount:      baseAmount,
+        bonusAmount: 0,
+        paidAmount:  baseAmount,
+        dueAmount:   0,
+        status:      "paid",
+        paymentDate: new Date(),
+        note:        String(note || "Bulk salary payment").trim(),
+      },
+      { new: true, upsert: true, runValidators: true, setDefaultsOnInsert: true },
+    ).populate("employee");
+
+    results.push(payment);
+  }
+
+  // Refresh due-salary totals for all affected employees
+  await Promise.all(employees.map((e) => refreshEmployeeDue(e._id)));
+  return results;
+}
+
 module.exports = {
   createEmployee,
   generateMonthlySalaries,
+  payAllSalaries,
   recordSalaryPayment,
   refreshEmployeeDue,
   updateEmployee,

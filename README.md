@@ -1,8 +1,8 @@
 # School Manager ERP
 
-A full-stack school management system covering students, staff, fees, marks, attendance, classrooms, and expenses. Runs as a **web app** (Render.com / any Node host) or a **one-click Windows desktop app** (Electron + embedded MongoDB — no server or internet required).
+A full-stack school management system covering students, staff, fees, marks, attendance, leave management, classrooms, and expenses. Runs as a **web app** (Render.com / any Node host) or a **one-click Windows desktop app** (Electron + embedded MongoDB — no server or internet required).
 
-**Version:** 1.3.0 &nbsp;·&nbsp; **Stack:** React 18 · Express · MongoDB · Electron
+**Version:** 1.4.0 &nbsp;·&nbsp; **Stack:** React 18 · Express · MongoDB · Electron
 
 ---
 
@@ -18,9 +18,10 @@ A full-stack school management system covering students, staff, fees, marks, att
 8. [API Reference](#api-reference)
 9. [Multi-tenant Database Setup](#multi-tenant-database-setup)
 10. [Deploy to Render.com](#deploy-to-rendercom)
-11. [Push to GitHub from VS Code](#push-to-github-from-vs-code)
-12. [Fingerprint Authentication](#fingerprint-authentication)
-13. [Caching Strategy](#caching-strategy)
+11. [Keep the Server Always Running](#keep-the-server-always-running)
+12. [Push to GitHub from VS Code](#push-to-github-from-vs-code)
+13. [Fingerprint Authentication](#fingerprint-authentication)
+14. [Caching & Performance Strategy](#caching--performance-strategy)
 
 ---
 
@@ -50,6 +51,7 @@ A full-stack school management system covering students, staff, fees, marks, att
 - Generate monthly fees for an entire class in one click
 - Generate exam fees by term for a whole class in one click
 - Full payment ledger per student with running due balance
+- Responsive Finance Overview with collection stats
 
 ### Employee Management
 - Staff profiles: name, role, salary type, phone, email, address, joining date, status
@@ -59,8 +61,20 @@ A full-stack school management system covering students, staff, fees, marks, att
 
 ### Salaries & Increments
 - Record monthly salary payments with paid amount and due tracking
-- Generate monthly salaries for all employees in one click
+- Generate monthly salary ledgers for all employees in one click
+- **Pay All Salaries** — admin-only one-click bulk payment: select a month, preview all active employees and the total amount, confirm to mark everyone as fully paid simultaneously
 - Salary increment records with previous salary, increment amount, effective date, and reason
+
+### Leave & Absence Management
+- Teachers and staff submit leave applications with date range and reason
+- **Smart substitute assignment** — the form automatically lists all class periods the teacher is responsible for within the leave period (based on their class routine)
+- For each affected period, applicant selects:
+  - A **substitute teacher** from the list of active teachers
+  - The **student section** the substitute will cover
+- Applications are sent to admin for review
+- Admin **Leave Requests** panel shows all applications with status filter tabs (All / Pending / Approved / Rejected)
+- Admin can approve or reject each application with a written review note
+- Full substitute assignment detail visible in both teacher and admin views
 
 ### Exam Marks & Results
 - Enter marks per student: subject, exam type (monthly / half-yearly / annual / class test), total marks, obtained marks, contribution percentage
@@ -75,7 +89,7 @@ A full-stack school management system covering students, staff, fees, marks, att
 - Daily employee attendance: present, late, absent, leave, half-day
 - Manual entry, bulk mark for a whole day, and biometric scan (WebAuthn / ZKTeco)
 - Monthly attendance grid view
-- Register new fingerprint credentials from the Profile Settings page
+- Employees register fingerprint credentials from the Attendance panel
 
 ### Expenses
 - Log school purchases and costs with title, category, amount, paid-to, payment method, and receipt number
@@ -84,7 +98,11 @@ A full-stack school management system covering students, staff, fees, marks, att
 - Category breakdown summary with totals
 
 ### Class Routines
-- Timetable entries per class: day, subject, teacher, room, start and end time
+- Full timetable for every class from **Nursery through Class 12** (including Science / Arts / Commerce streams)
+- 6 periods per day × 6 days per week — 792 total routine entries seeded automatically
+- **Timetable view** — visual day/period grid with subject colour-coding, teacher name, and room number; hover to edit or delete (admin)
+- **List view** — searchable DataTable for bulk management
+- **Class picker dropdown** to switch between all 22 classes
 - Overlap detection (same teacher or same room at the same time)
 
 ### School Settings
@@ -103,7 +121,6 @@ A full-stack school management system covering students, staff, fees, marks, att
 ### User Management
 - Create, view, and manage user accounts with role assignment
 - Roles: admin, teacher, accountant, accounts, staff, student, audit
-- WebAuthn credential management from the profile page
 
 ### Dashboard
 - Key metrics: total students, total employees, total income collected, total dues
@@ -117,11 +134,11 @@ A full-stack school management system covering students, staff, fees, marks, att
 
 | Role | Access |
 |---|---|
-| `admin` | Full access to all modules, database config, user management |
+| `admin` | Full access to all modules, leave requests management, bulk salary payment, database config, user management |
 | `accountant` | Fees, payments, expenses, salaries — read + write |
 | `accounts` | Finance read-only |
-| `teacher` | Marks entry, routines, attendance — scoped to assigned class/section |
-| `staff` | Attendance view, own profile |
+| `teacher` | Marks entry, routines, attendance, submit leave applications — scoped to assigned class/section |
+| `staff` | Attendance view, submit leave applications, own profile |
 | `student` | Own profile, own payment history |
 | `audit` | Read-only access to all records |
 
@@ -131,14 +148,15 @@ A full-stack school management system covering students, staff, fees, marks, att
 
 ### Frontend
 - React 18 + React Router v6
-- Vite 6 (content-hashed production builds)
+- Vite 6 (content-hashed production builds, vendor/react chunk split)
 - Tailwind CSS v4 (utility-first, dark mode support)
 - Axios with `Cache-Control: no-cache` interceptor
-- `@simplewebauthn/browser` for WebAuthn fingerprint registration
+- `@simplewebauthn/browser` for WebAuthn biometric attendance registration
 
 ### Backend
 - Node.js 22 · Express 4
 - Mongoose 8 · MongoDB (Atlas cloud or local or embedded)
+- **Gzip compression** on all responses (60–80% payload reduction)
 - Custom JWT-based session tokens
 - `Cache-Control: no-store` on all `/api` responses
 - Dynamic database reconnection via `dbConfigService`
@@ -177,9 +195,9 @@ school-manager/
 │   │   ├── db.js                  # Mongoose connect (reads dbConfigService)
 │   │   ├── roles.js               # Allowed roles list
 │   │   └── school-config.json     # Runtime DB URI override (git-ignored)
-│   ├── controllers/               # One file per resource
-│   │   ├── classroomController.js
-│   │   ├── dbConfigController.js
+│   ├── controllers/
+│   │   ├── leaveController.js     # Leave application CRUD + admin review
+│   │   ├── salaryController.js    # Salary payments + bulk pay-all
 │   │   └── ...
 │   ├── middleware/
 │   │   ├── authMiddleware.js      # protect(), adminOnly(), permitRoles()
@@ -187,18 +205,19 @@ school-manager/
 │   │   ├── errorHandler.js
 │   │   └── notFound.js
 │   ├── models/
+│   │   ├── LeaveApplication.js    # Leave + embedded substitute entries
 │   │   ├── Classroom.js           # Room + shifts schema
 │   │   ├── ClassSection.js        # Sections per class
 │   │   └── ...
 │   ├── routes/
-│   │   ├── classroomRoutes.js
-│   │   ├── dbConfigRoutes.js
-│   │   ├── sectionRoutes.js
+│   │   ├── leaveRoutes.js
+│   │   ├── salaryRoutes.js        # Includes POST /pay-all
 │   │   └── ...
 │   ├── services/
 │   │   ├── dbConfigService.js     # Read/write school-config.json, reconnect
 │   │   ├── demoAccountService.js  # Seed default user accounts
-│   │   └── demoDataService.js     # Seed sample school data
+│   │   ├── demoDataService.js     # Seed sample school data (792 routine entries)
+│   │   └── salaryService.js       # recordSalaryPayment, payAllSalaries
 │   └── utils/                     # password hash, session tokens, helpers
 │
 ├── electron/
@@ -315,11 +334,11 @@ By default the desktop app uses an embedded MongoDB instance stored in the user'
 | `MONGODB_URI` | Yes* | — | MongoDB connection string |
 | `JWT_SECRET` | Yes | — | Secret for signing session tokens |
 | `ENABLE_DEMO_ACCOUNTS` | No | `false` | Seed default accounts on startup |
-| `ENABLE_DEMO_DATA` | No | `false` | Seed sample students/employees/classrooms |
+| `ENABLE_DEMO_DATA` | No | `false` | Seed sample students/employees/classrooms/routines |
 | `CORS_ORIGIN` | No | `*` | Allowed origin(s), comma-separated |
 | `VITE_API_URL` | No | `/api` | Frontend API base URL |
 
-> *Desktop app uses embedded MongoDB by default. `MONGODB_URI` is only required for the web/server deployment.
+> *Desktop app uses embedded MongoDB by default. `MONGODB_URI` is only required for web/server deployment.
 
 ---
 
@@ -343,8 +362,9 @@ All routes return JSON. Protected routes require `Authorization: Bearer <token>`
 | POST | `/api/payments/generate-monthly` | Bearer | Bulk-generate monthly fees |
 | POST | `/api/payments/generate-exam` | Bearer | Bulk-generate exam fees |
 | GET/POST | `/api/salaries` | Bearer | Employee salary payments |
-| POST | `/api/salaries/generate-monthly` | Bearer | Bulk-generate monthly salaries |
-| GET/POST | `/api/salary-increments` | Bearer | Salary increment records |
+| POST | `/api/salaries/pay-all` | Bearer (admin) | Bulk pay all active employees for a month |
+| POST | `/api/salaries/generate-monthly` | Bearer | Bulk-generate monthly salary ledger |
+| GET/PUT/DELETE | `/api/salary-increments` | Bearer | Salary increment records |
 | GET/POST | `/api/marks` | Bearer | Exam marks entry |
 | GET | `/api/marks/results` | Bearer | Computed result cards |
 | GET/POST | `/api/attendance` | Bearer | Employee attendance |
@@ -362,6 +382,10 @@ All routes return JSON. Protected routes require `Authorization: Bearer <token>`
 | POST | `/api/db-config/test` | Bearer (admin) | Test a MongoDB URI |
 | PUT | `/api/db-config` | Bearer (admin) | Save URI and reconnect |
 | DELETE | `/api/db-config` | Bearer (admin) | Reset to default/env URI |
+| GET | `/api/leaves` | Bearer | List leave applications (admin: all, others: own) |
+| POST | `/api/leaves` | Bearer | Submit a new leave application |
+| PUT | `/api/leaves/:id/review` | Bearer (admin) | Approve or reject an application |
+| DELETE | `/api/leaves/:id` | Bearer | Delete application (own pending or admin any) |
 
 ---
 
@@ -417,7 +441,7 @@ The repo includes `render.yaml` for a single-service deploy.
    - `ENABLE_DEMO_ACCOUNTS=true`
 4. Deploy — Render runs `npm ci && npm run build` then `npm start`
 
-**Cold starts:** The free tier spins down after 15 min of inactivity. The login page fires `GET /api/health` on mount to pre-warm the server before the user clicks Login.
+**Cold starts:** The free tier spins down after 15 min of inactivity. The login page fires `GET /api/health` on mount to pre-warm the server before the user clicks Login. To eliminate cold starts entirely, see [Keep the Server Always Running](#keep-the-server-always-running).
 
 ### Option B — Render (API) + Vercel (frontend)
 
@@ -425,86 +449,105 @@ See [DEPLOYMENT_STEPS.md](./DEPLOYMENT_STEPS.md) for the full step-by-step guide
 
 ---
 
+## Keep the Server Always Running
+
+On Render's free tier the server **sleeps after 15 minutes of no traffic** and takes 50–90 seconds to wake — this is what causes the "Starting the server…" spinner on the login page.
+
+### Option A — UptimeRobot (free, no code changes)
+
+1. Create a free account at [uptimerobot.com](https://uptimerobot.com)
+2. **Add New Monitor** → HTTP(s)
+3. Set the URL to `https://your-app.onrender.com/api/health`
+4. Set the interval to **5 minutes**
+5. Save
+
+The server receives a ping every 5 minutes and never sleeps. Free plan allows up to 50 monitors.
+
+### Option B — Upgrade Render to Starter ($7/month)
+
+In the Render dashboard → your service → **Settings → Instance Type → Starter**. The server stays on 24/7 with no spin-up delay.
+
+### Option C — Self-host with PM2 (local / VPS)
+
+Run the server permanently on your own machine or a VPS using [PM2](https://pm2.keymetrics.io/):
+
+```bash
+# Install PM2 globally
+npm install -g pm2
+
+# Start the server
+cd /path/to/school-manager
+pm2 start server/server.js --name "school-manager"
+
+# Auto-start on Windows reboot
+pm2 startup
+pm2 save
+
+# Useful commands
+pm2 status          # check running processes
+pm2 logs school-manager   # view live logs
+pm2 restart school-manager
+pm2 stop school-manager
+```
+
+PM2 keeps the server alive forever and auto-restarts it if it crashes.
+
+---
+
 ## Push to GitHub from VS Code
 
-### First time (new repo)
+Your repo is already connected to GitHub. All changes can be committed and pushed directly from VS Code.
 
-1. **Create the repo on GitHub**
-   - Go to [github.com/new](https://github.com/new)
-   - Name it, set it to Public or Private, **do not** check "Add a README" (you already have one)
-   - Click **Create repository**
-   - Copy the HTTPS URL shown (e.g. `https://github.com/yourname/school-manager.git`)
+### Commit and push changes (VS Code UI)
 
-2. **Open VS Code Source Control**
-   - Press `Ctrl + Shift + G` or click the branch icon in the left sidebar
+1. Press `Ctrl + Shift + G` to open **Source Control**
+2. Click `+` next to **Changes** to stage all modified files
+3. Type a commit message in the box at the top
+4. Press `Ctrl + Enter` to commit
+5. Click the **Sync Changes** button (↑↓ icon) or go to `...` → **Push**
 
-3. **Initialize Git (if not already a repo)**
-   - Click **Initialize Repository** button in the Source Control panel
-   - Or run in the terminal: `git init`
+### First-time setup (new repo)
 
-4. **Check `.gitignore`** — make sure these are listed:
+If the repo is not yet on GitHub:
+
+1. Go to [github.com/new](https://github.com/new) → create a repo (no README)
+2. Copy the HTTPS URL
+3. In the VS Code terminal (`Ctrl + \``):
+   ```bash
+   git remote add origin https://github.com/yourname/school-manager.git
+   git branch -M main
+   git push -u origin main
    ```
-   node_modules/
-   client/dist/
-   dist-desktop/
-   .env
-   server/config/school-config.json
-   ```
+4. VS Code will ask for a **Personal Access Token** — generate one at  
+   GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic) → Generate new token  
+   Scopes needed: `repo`
 
-5. **Stage all files**
-   - In Source Control, click the `+` next to **Changes** to stage everything
-   - Or run: `git add .`
+### Quick reference
 
-6. **Write a commit message and commit**
-   - Type a message in the "Message" box at the top of Source Control
-   - Press `Ctrl + Enter` (or click the ✓ checkmark)
-
-7. **Add the remote and push**
-   - Open the terminal in VS Code (`Ctrl + \``)
-   - Run:
-     ```bash
-     git remote add origin https://github.com/yourname/school-manager.git
-     git branch -M main
-     git push -u origin main
-     ```
-   - VS Code will ask for your GitHub username and password/token
-   - Use a **Personal Access Token** (not your GitHub password) — generate one at  
-     GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic) → Generate new token  
-     Scopes needed: `repo`
-
-8. **Done** — your code is on GitHub
-
-### Subsequent pushes
-
-After making changes:
-
-1. In **Source Control** panel, click `+` next to each changed file (or `+` next to Changes for all)
-2. Type a commit message
-3. Press `Ctrl + Enter` to commit
-4. Click the **Sync Changes** button (circular arrows) at the top of Source Control  
-   — this does `git pull` then `git push` in one step
-
-### Using the VS Code UI (no terminal)
-
-| Action | VS Code UI |
+| Action | VS Code |
 |---|---|
-| Stage all changes | Source Control → click `+` next to **Changes** |
-| Stage one file | Source Control → hover the file → click `+` |
+| Stage all | Source Control → `+` next to Changes |
+| Stage one file | Hover file → click `+` |
 | Commit | Type message → `Ctrl + Enter` |
-| Push | Click `...` menu → **Push** |
-| Pull | Click `...` menu → **Pull** |
-| View branches | Click branch name in the bottom-left status bar |
-| Create branch | Bottom-left branch name → **Create new branch** |
-
-### Tip — GitHub extension
-
-Install the **GitHub Pull Requests** extension from the VS Code marketplace for in-editor PR reviews and issue tracking.
+| Push | `...` menu → Push |
+| Pull | `...` menu → Pull |
+| New branch | Click branch name bottom-left → Create new branch |
 
 ---
 
 ## Fingerprint Authentication
 
-### Option A — ZKTeco Hardware Device (Desktop app)
+### Employee Attendance Biometric
+
+Employees register fingerprint or Windows Hello credentials from the **Attendance** page. During daily check-in, they verify with their registered device — no password needed.
+
+```
+@simplewebauthn/browser  ──▶  POST /api/attendance/biometric
+                                    │
+                         Mongoose → EmployeeAttendance record
+```
+
+### ZKTeco Hardware Device (Desktop app)
 
 Uses a physical ZKTeco fingerprint reader on the local network.
 
@@ -522,21 +565,15 @@ ZKTeco Device ──TCP/IP──▶ electron/zkteco.cjs ──IPC──▶ Elect
 **Setup:**
 1. Add `fingerprintId: { type: String, default: null }` to `server/models/User.js`
 2. Add `POST /api/auth/fingerprint` route that finds user by `fingerprintId` and returns a token
-3. In `electron/main.cjs`, forward scan events to the renderer via `mainWindow.webContents.send("fingerprint:scan", record)`
+3. In `electron/main.cjs`, forward scan events via `mainWindow.webContents.send("fingerprint:scan", record)`
 4. In `electron/preload.cjs`, expose `onFingerprintScan` via `contextBridge`
 5. In `Login.jsx`, call the fingerprint login API on the scan event
 
-### Option B — WebAuthn / FIDO2 (Web + Windows Hello / Touch ID)
-
-Already integrated. Users register their fingerprint or Windows Hello from **Profile Settings** and can use it to log in.
-
-**Libraries:** `@simplewebauthn/server` (backend) · `@simplewebauthn/browser` (frontend — already installed)
-
-See the full implementation guide in the previous version of this README or the `electron/zkteco.cjs` source file.
-
 ---
 
-## Caching Strategy
+## Caching & Performance Strategy
+
+### HTTP Caching
 
 | Layer | Policy | Reason |
 |---|---|---|
@@ -544,11 +581,54 @@ See the full implementation guide in the previous version of this README or the 
 | Vite hashed assets (`/assets/*`) | `Cache-Control: public, max-age=31536000, immutable` | Content-hashed filenames — safe to cache forever |
 | `index.html` | `Cache-Control: no-cache` | Must revalidate so browsers pick up new asset hashes after deploy |
 | Other static files (icons, logos) | `Cache-Control: public, max-age=86400` | Rarely change — 1-day cache |
-| Axios requests | `Cache-Control: no-cache`, `Pragma: no-cache` | Defence-in-depth against intermediate proxy caching |
+| Axios requests | `Cache-Control: no-cache`, `Pragma: no-cache` | Defence-in-depth against proxy caching |
+
+### Compression
+
+All API and HTML responses are **gzip-compressed** by the `compression` Express middleware, reducing payload size by 60–80%.
+
+### Bundle Splitting (Vite)
+
+The production build splits JavaScript into separate chunks:
+
+| Chunk | Contents | Why |
+|---|---|---|
+| `vendor` | `react`, `react-dom` | Never changes between deploys — cached permanently |
+| `router` | `react-router-dom` | Changes less often than app code |
+| `http` | `axios` | Changes less often than app code |
+| `index` | Application code | Re-downloads only when you deploy new features |
+
+### Database Indexes
+
+All high-traffic queries are backed by Mongoose indexes:
+
+| Collection | Indexed fields |
+|---|---|
+| `Student` | `(className, rollNumber)` unique · `(status, className)` |
+| `StudentPayment` | `(student, feeType, billingMonth, term)` |
+| `SalaryPayment` | `(employee, salaryMonth)` unique |
+| `Employee` | `(status, role)` |
+| `ExamMark` | `(student, subject, academicYear, examType, examNo, month)` unique · `(className, subject, academicYear)` |
+| `EmployeeAttendance` | `(employee, date)` unique · `(date)` |
+| `ClassRoutine` | `(className, day, startTime, subject)` unique |
+| `LeaveApplication` | `(applicant, status)` · `(fromDate, toDate)` |
+| `Expense` | `(date, category)` |
 
 ---
 
 ## Changelog
+
+### v1.4.0
+- **Leave & Absence Management** — teachers/staff submit applications with date range, reason, and substitute teacher assignments per class period; admin review panel with approve/reject/note
+- **Pay All Salaries** — admin-only one-click bulk salary payment with employee preview, total amount, month selector, and note field
+- **Full class routines** — Nursery through Class 12 (including Science/Arts/Commerce streams), 792 entries seeded automatically
+- **Routine timetable view** — visual day × period grid with subject colour-coding, teacher, room, class picker dropdown
+- **Student section in leave substitutes** — each substitute assignment can specify which section the substitute covers
+- **Gzip compression** — all API responses compressed, 60–80% smaller
+- **Bundle splitting** — React/vendor chunk cached permanently by browser
+- **MongoDB indexes** — added on Employee, Student, LeaveApplication for faster queries
+- **Finance Overview responsive** — fixed overflow on mid-size and mobile screens
+- **Mobile nav improvements** — Settings + Logout side-by-side in footer, Help moved to Appearance section, section titles in white
 
 ### v1.3.0
 - **Classrooms** — manage physical rooms with bench count, capacity, live student count, and multi-shift teacher assignments

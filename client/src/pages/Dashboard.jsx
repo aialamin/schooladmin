@@ -724,6 +724,7 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
     sections: [],
     classrooms: [],
     teacherUsers: [],
+    leaves: [],
   });
   const [modal, setModal] = useState(null);
   const [editingId, setEditingId] = useState("");
@@ -749,18 +750,31 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
   const [biometricResult, setBiometricResult] = useState(null);
   const [enrollLoading, setEnrollLoading] = useState(null); // employeeId being enrolled | null
   const [enrollStatus, setEnrollStatus] = useState(null); // { success, message } | null
-  // WebAuthn / fingerprint registration state
-  const [webauthnCredentials, setWebauthnCredentials] = useState([]);
-  const [webauthnStatus, setWebauthnStatus] = useState("");
-  const [webauthnLoading, setWebauthnLoading] = useState(false);
-  const [webauthnSupported] = useState(
-    () => !!(window.PublicKeyCredential)
-  );
   const [bulkAttendanceRows, setBulkAttendanceRows] = useState([]);
   const [attendanceView, setAttendanceView] = useState("monthly"); // "today" | "monthly"
   const [attendanceMonth, setAttendanceMonth] = useState(() => new Date().toISOString().slice(0, 7));
   const [expenseCategoryFilter, setExpenseCategoryFilter] = useState("all");
   const [expenseMonth, setExpenseMonth] = useState(() => new Date().toISOString().slice(0, 7));
+  const [routineView, setRoutineView] = useState("timetable"); // "timetable" | "list"
+  const [routineClassFilter, setRoutineClassFilter] = useState("");
+
+  // ── Leave application state ──────────────────────────────────────────────────
+  const [leaveForm, setLeaveForm] = useState({ fromDate: "", toDate: "", reason: "" });
+  const [leaveSubstitutes, setLeaveSubstitutes] = useState({}); // { routineId: employeeId }
+  const [leaveSections, setLeaveSections] = useState({});     // { routineId: sectionId }
+  const [leaveSubmitting, setLeaveSubmitting] = useState(false);
+  const [leaveFilter, setLeaveFilter] = useState("all");
+  const [leaveDetailModal, setLeaveDetailModal] = useState(null);
+  const [leaveReviewModal, setLeaveReviewModal] = useState(null);
+  const [leaveReviewNote, setLeaveReviewNote] = useState("");
+  const [leaveReviewStatus, setLeaveReviewStatus] = useState("approved");
+  const [leaveReviewLoading, setLeaveReviewLoading] = useState(false);
+
+  // Pay-all salaries modal
+  const [payAllModal, setPayAllModal]     = useState(false);
+  const [payAllMonth, setPayAllMonth]     = useState(currentMonth);
+  const [payAllNote, setPayAllNote]       = useState("");
+  const [payAllLoading, setPayAllLoading] = useState(false);
 
   // Database configuration state (admin only)
   const [dbConfig, setDbConfig] = useState(null);
@@ -915,11 +929,6 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
         email: user?.email || "",
         photoUrl: user?.photoUrl || "",
       });
-      // Load existing biometric credentials for this user
-      api.get("/api/auth/me", { headers: { Authorization: `Bearer ${token}` } })
-        .then(({ data: me }) => setWebauthnCredentials(me.user?.webauthnCredentials || []))
-        .catch(() => {});
-      setWebauthnStatus("");
       setModal(type);
       return;
     }
@@ -1639,44 +1648,6 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
       dueAmount: existing?.dueAmount ?? 0,
       status: existing?.status || "unpaid",
     };
-  }
-
-  async function registerBiometric() {
-    setWebauthnLoading(true);
-    setWebauthnStatus("");
-    try {
-      const { data: options } = await api.get("/api/auth/webauthn/register-options", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const credential = await startRegistration({ optionsJSON: options });
-      await api.post("/api/auth/webauthn/register",
-        { credential, deviceName: "This Device" },
-        { headers: { Authorization: `Bearer ${token}` } },
-      );
-      setWebauthnStatus("success");
-      // Refresh credentials list
-      const { data: me } = await api.get("/api/auth/me", { headers: { Authorization: `Bearer ${token}` } });
-      setWebauthnCredentials(me.user?.webauthnCredentials || []);
-    } catch (err) {
-      if (err.name === "NotAllowedError") {
-        setWebauthnStatus("cancelled");
-      } else {
-        setWebauthnStatus("error:" + (getErrorMessage(err) || "Registration failed."));
-      }
-    } finally {
-      setWebauthnLoading(false);
-    }
-  }
-
-  async function removeBiometric(credentialID) {
-    try {
-      await api.delete(`/api/auth/webauthn/credential/${encodeURIComponent(credentialID)}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      setWebauthnCredentials((prev) => prev.filter((c) => c.credentialID !== credentialID));
-    } catch (err) {
-      setWebauthnStatus("error:" + (getErrorMessage(err) || "Could not remove credential."));
-    }
   }
 
   function handleProfilePhotoChange(event) {
@@ -2964,16 +2935,151 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
     );
   };
 
-  const renderRoutines = () => (
-    <>
-      <SectionHeader
-        eyebrow="Class Routine"
-        title="Teacher Routine Planner"
-        action={isAdmin && <button className="btn primary" type="button" onClick={() => openModal("routine")}>Add Routine</button>}
-      />
-      <DataTable columns={routinesColumns} rows={data.routines} />
-    </>
-  );
+  const renderRoutines = () => {
+    const DAYS = ["Saturday","Sunday","Monday","Tuesday","Wednesday","Thursday","Friday"];
+
+    // All unique periods across all routines, sorted by start time
+    const allPeriods = [...new Map(
+      data.routines.map(r => [`${r.startTime}|${r.endTime}`, { startTime: r.startTime, endTime: r.endTime }])
+    ).values()].sort((a, b) => a.startTime.localeCompare(b.startTime));
+
+    // All unique classNames that have at least one routine, sorted naturally
+    const allClasses = [...new Set(data.routines.map(r => r.className))].sort((a, b) => {
+      const num = (s) => Number((String(s).match(/\d+/) || [0])[0]);
+      return num(a) - num(b) || a.localeCompare(b);
+    });
+
+    // Default to first class if none selected
+    const selectedClass = routineClassFilter || allClasses[0] || "";
+
+    // Routines for the selected class, keyed by "day|startTime"
+    const classRoutines = data.routines.filter(r => r.className === selectedClass);
+    const cellMap = {};
+    classRoutines.forEach(r => { cellMap[`${r.day}|${r.startTime}`] = r; });
+
+    // Days that have at least one entry for this class
+    const activeDays = DAYS.filter(d => classRoutines.some(r => r.day === d));
+
+    // Subject → color mapping (consistent per subject name)
+    const SUBJECT_COLORS = [
+      { bg: "#eff6ff", border: "#bfdbfe", text: "#1d4ed8" },
+      { bg: "#f0fdf4", border: "#bbf7d0", text: "#15803d" },
+      { bg: "#fdf4ff", border: "#e9d5ff", text: "#7e22ce" },
+      { bg: "#fff7ed", border: "#fed7aa", text: "#c2410c" },
+      { bg: "#ecfdf5", border: "#6ee7b7", text: "#065f46" },
+      { bg: "#fef9c3", border: "#fde68a", text: "#92400e" },
+      { bg: "#fce7f3", border: "#fbcfe8", text: "#9d174d" },
+      { bg: "#e0f2fe", border: "#7dd3fc", text: "#0c4a6e" },
+      { bg: "#fef2f2", border: "#fecaca", text: "#b91c1c" },
+    ];
+    const subjectColorMap = {};
+    const allSubjects = [...new Set(data.routines.map(r => r.subject))];
+    allSubjects.forEach((subj, i) => { subjectColorMap[subj] = SUBJECT_COLORS[i % SUBJECT_COLORS.length]; });
+
+    return (
+      <div className="stack">
+        <SectionHeader
+          eyebrow="Class Routine"
+          title="Weekly Class Timetable"
+          action={
+            <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+              {/* View toggle */}
+              <div style={{ display: "flex", background: "var(--app-surface-2,#f1f5f9)", borderRadius: "10px", padding: "3px" }}>
+                <button type="button"
+                  onClick={() => setRoutineView("timetable")}
+                  style={{ padding: "5px 14px", borderRadius: "8px", border: "none", cursor: "pointer", fontSize: "12.5px", fontWeight: 700,
+                    background: routineView === "timetable" ? "var(--app-primary,#2563eb)" : "transparent",
+                    color: routineView === "timetable" ? "#fff" : "var(--app-muted)" }}>
+                  Timetable
+                </button>
+                <button type="button"
+                  onClick={() => setRoutineView("list")}
+                  style={{ padding: "5px 14px", borderRadius: "8px", border: "none", cursor: "pointer", fontSize: "12.5px", fontWeight: 700,
+                    background: routineView === "list" ? "var(--app-primary,#2563eb)" : "transparent",
+                    color: routineView === "list" ? "#fff" : "var(--app-muted)" }}>
+                  List
+                </button>
+              </div>
+              {isAdmin && <button className="btn primary" type="button" onClick={() => openModal("routine")}>+ Add</button>}
+            </div>
+          }
+        />
+
+        {/* ── Timetable view ── */}
+        {routineView === "timetable" && (
+          <div className="stack">
+            {/* Class picker — dropdown */}
+            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+              <label style={{ fontSize: "12.5px", fontWeight: 700, color: "var(--app-muted)", textTransform: "uppercase", letterSpacing: "0.06em", whiteSpace: "nowrap" }}>Class:</label>
+              <select className="control" style={{ maxWidth: "240px" }}
+                value={selectedClass}
+                onChange={e => setRoutineClassFilter(e.target.value)}>
+                {allClasses.length === 0 && <option value="">No routines yet</option>}
+                {allClasses.map(cls => <option key={cls} value={cls}>{cls}</option>)}
+              </select>
+            </div>
+
+            {/* Timetable grid */}
+            {selectedClass && (
+              <div className="routine-timetable-wrap">
+                <div className="routine-timetable" style={{ "--rt-cols": activeDays.length + 1 }}>
+                  {/* Header row */}
+                  <div className="rt-corner">
+                    <span>{selectedClass}</span>
+                  </div>
+                  {activeDays.map(day => (
+                    <div key={day} className="rt-day-header">{day}</div>
+                  ))}
+
+                  {/* Period rows */}
+                  {allPeriods.map(period => (
+                    <Fragment key={`${period.startTime}-${period.endTime}`}>
+                      {/* Time label */}
+                      <div className="rt-time-cell">
+                        <span className="rt-time-start">{period.startTime}</span>
+                        <span className="rt-time-sep">–</span>
+                        <span className="rt-time-end">{period.endTime}</span>
+                      </div>
+                      {/* Day cells */}
+                      {activeDays.map(day => {
+                        const entry = cellMap[`${day}|${period.startTime}`];
+                        if (!entry) return <div key={day} className="rt-empty-cell" />;
+                        const color = subjectColorMap[entry.subject] || SUBJECT_COLORS[0];
+                        return (
+                          <div key={day} className="rt-subject-cell" style={{ "--rt-bg": color.bg, "--rt-border": color.border, "--rt-text": color.text }}>
+                            <span className="rt-subject-name">{entry.subject}</span>
+                            <span className="rt-teacher-name">{entry.teacherName}</span>
+                            {entry.room && <span className="rt-room">Room {entry.room}</span>}
+                            {isAdmin && (
+                              <div className="rt-actions">
+                                <button title="Edit" onClick={() => openModal("routine", entry)}>✎</button>
+                                <button title="Delete" onClick={() => handleDelete("routine", entry._id)}>×</button>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </Fragment>
+                  ))}
+                </div>
+
+                {classRoutines.length === 0 && (
+                  <p style={{ textAlign: "center", color: "var(--app-muted)", padding: "40px 0", fontSize: "14px" }}>
+                    No routine entries for {selectedClass} yet.
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── List view ── */}
+        {routineView === "list" && (
+          <DataTable columns={routinesColumns} rows={data.routines} />
+        )}
+      </div>
+    );
+  };
 
   const renderSalaries = () => (
     <div className="stack">
@@ -2984,6 +3090,11 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
           <>
             <button className="btn dark" type="button" onClick={() => openModal("monthlySalaries")}>Generate Monthly</button>
             <button className="btn success" type="button" onClick={() => openModal("salary")}>Pay Salary</button>
+            {isAdmin && (
+              <button className="btn warn" type="button" onClick={() => { setPayAllMonth(currentMonth); setPayAllNote(""); setPayAllModal(true); }}>
+                Pay All
+              </button>
+            )}
             <button className="btn primary" type="button" onClick={() => openModal("increment")}>Add Increment</button>
           </>
         )}
@@ -3117,6 +3228,501 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
       </div>
     );
   };
+
+  // ── Leave Apply (teacher / staff) ───────────────────────────────────────────
+  function renderLeaveApply() {
+    const fmtDate = (d) => d ? new Date(d).toLocaleDateString("en-BD", { day: "2-digit", month: "short", year: "numeric" }) : "";
+    const activeTeachers = data.employees.filter((e) => e.status === "active" && e.role === "teacher");
+
+    // Compute which days of the week fall in the selected range
+    const affectedRoutines = (() => {
+      if (!leaveForm.fromDate || !leaveForm.toDate) return [];
+      const from = new Date(leaveForm.fromDate + "T00:00:00");
+      const to   = new Date(leaveForm.toDate   + "T00:00:00");
+      if (from > to) return [];
+      const dayNames = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+      const days = new Set();
+      const cur = new Date(from);
+      while (cur <= to) { days.add(dayNames[cur.getDay()]); cur.setDate(cur.getDate() + 1); }
+      return data.routines.filter(
+        (r) => r.status !== "inactive" &&
+               String(r.teacherName || "").trim().toLowerCase() === String(user.name || "").trim().toLowerCase() &&
+               days.has(r.day)
+      );
+    })();
+
+    const myLeaves = (data.leaves || []).filter((l) => String(l.applicant) === String(user._id) || l.applicantName === user.name);
+
+    const STATUS_BADGE = {
+      pending:  "bg-amber-100 text-amber-700",
+      approved: "bg-emerald-100 text-emerald-700",
+      rejected: "bg-red-100 text-red-700",
+    };
+
+    async function handleSubmitLeave(e) {
+      e.preventDefault();
+      if (!leaveForm.reason.trim()) { setError("Please enter a reason."); return; }
+      setLeaveSubmitting(true);
+      setError("");
+      try {
+        const substitutes = affectedRoutines.map((r) => {
+          const subId   = leaveSubstitutes[r._id] || "";
+          const subEmp  = activeTeachers.find((t) => t._id === subId);
+          const secId   = leaveSections[r._id] || "";
+          const secObj  = data.sections.find((s) => s._id === secId);
+          return {
+            routineId:              r._id,
+            className:              r.className,
+            day:                    r.day,
+            subject:                r.subject,
+            startTime:              r.startTime,
+            endTime:                r.endTime,
+            substituteEmployeeId:   subId || null,
+            substituteEmployeeName: subEmp?.name || "",
+            sectionId:              secId || null,
+            sectionName:            secObj?.sectionName || "",
+          };
+        });
+        await erpApi.createLeave(token, { fromDate: leaveForm.fromDate, toDate: leaveForm.toDate, reason: leaveForm.reason, substitutes });
+        setSuccess("Leave application submitted successfully.");
+        setLeaveForm({ fromDate: "", toDate: "", reason: "" });
+        setLeaveSubstitutes({});
+        setLeaveSections({});
+        const partial = await refreshPartialData(token, ["leaves"]);
+        setData((prev) => ({ ...prev, ...partial }));
+      } catch (err) {
+        setError(getErrorMessage(err));
+      } finally {
+        setLeaveSubmitting(false);
+      }
+    }
+
+    async function handleDeleteLeave(id) {
+      if (!window.confirm("Delete this leave application?")) return;
+      try {
+        await erpApi.deleteLeave(token, id);
+        setData((prev) => ({ ...prev, leaves: prev.leaves.filter((l) => l._id !== id) }));
+        setSuccess("Application deleted.");
+      } catch (err) { setError(getErrorMessage(err)); }
+    }
+
+    return (
+      <div className="stack">
+        <SectionHeader eyebrow="Leave Management" title="Apply for Leave or Absence" />
+
+        {/* ── Application form ── */}
+        <div className="smart-table-card" style={{ padding: "20px 22px" }}>
+          <h3 style={{ fontSize: "14px", fontWeight: 700, color: "var(--app-text)", marginBottom: "16px" }}>New Application</h3>
+          <form onSubmit={handleSubmitLeave}>
+            <div className="form-grid" style={{ marginBottom: "16px" }}>
+              <div>
+                <label className="form-label">From Date</label>
+                <input className="control" type="date" required value={leaveForm.fromDate}
+                  onChange={(e) => { setLeaveForm({ ...leaveForm, fromDate: e.target.value }); setLeaveSubstitutes({}); setLeaveSections({}); }} />
+              </div>
+              <div>
+                <label className="form-label">To Date</label>
+                <input className="control" type="date" required value={leaveForm.toDate}
+                  min={leaveForm.fromDate || undefined}
+                  onChange={(e) => { setLeaveForm({ ...leaveForm, toDate: e.target.value }); setLeaveSubstitutes({}); setLeaveSections({}); }} />
+              </div>
+              <div className="full-span">
+                <label className="form-label">Reason for Leave</label>
+                <textarea className="control" rows={3} required placeholder="Explain the reason for your absence…"
+                  value={leaveForm.reason} onChange={(e) => setLeaveForm({ ...leaveForm, reason: e.target.value })} />
+              </div>
+            </div>
+
+            {/* Substitute selection */}
+            {affectedRoutines.length > 0 && (
+              <div style={{ marginBottom: "16px" }}>
+                <p style={{ fontSize: "13px", fontWeight: 700, color: "var(--app-text)", marginBottom: "10px" }}>
+                  Your classes during this period — select section and substitute teacher for each:
+                </p>
+                <div style={{ overflowX: "auto" }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
+                    <thead>
+                      <tr style={{ background: "var(--app-surface-2,#f8fafc)", borderBottom: "1px solid var(--app-border)" }}>
+                        {["Day","Class","Section","Subject","Time","Substitute Teacher"].map((h) => (
+                          <th key={h} style={{ padding: "8px 12px", textAlign: "left", fontWeight: 600, color: "var(--app-muted)", fontSize: "11.5px", textTransform: "uppercase", letterSpacing: "0.04em" }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {affectedRoutines.map((r) => {
+                        const classSections = data.sections.filter((s) => s.className === r.className);
+                        return (
+                          <tr key={r._id} style={{ borderBottom: "1px solid var(--app-border)" }}>
+                            <td style={{ padding: "8px 12px", fontWeight: 600, color: "var(--app-primary,#2563eb)" }}>{r.day}</td>
+                            <td style={{ padding: "8px 12px" }}>{r.className}</td>
+                            <td style={{ padding: "8px 12px" }}>
+                              <select className="control" style={{ fontSize: "12.5px", padding: "5px 8px", minWidth: "110px" }}
+                                value={leaveSections[r._id] || ""}
+                                onChange={(e) => setLeaveSections({ ...leaveSections, [r._id]: e.target.value })}>
+                                <option value="">All sections</option>
+                                {classSections.map((s) => (
+                                  <option key={s._id} value={s._id}>{s.sectionName}</option>
+                                ))}
+                              </select>
+                            </td>
+                            <td style={{ padding: "8px 12px" }}>{r.subject}</td>
+                            <td style={{ padding: "8px 12px", whiteSpace: "nowrap" }}>{r.startTime} – {r.endTime}</td>
+                            <td style={{ padding: "8px 12px" }}>
+                              <select className="control" style={{ fontSize: "12.5px", padding: "5px 8px", minWidth: "160px" }}
+                                value={leaveSubstitutes[r._id] || ""}
+                                onChange={(e) => setLeaveSubstitutes({ ...leaveSubstitutes, [r._id]: e.target.value })}>
+                                <option value="">— Select teacher —</option>
+                                {activeTeachers
+                                  .filter((t) => String(t.name || "").toLowerCase() !== String(user.name || "").toLowerCase())
+                                  .map((t) => (
+                                    <option key={t._id} value={t._id}>
+                                      {t.name}{t.subject ? ` · ${t.subject}` : ""}
+                                    </option>
+                                  ))}
+                              </select>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {leaveForm.fromDate && leaveForm.toDate && !affectedRoutines.length && (
+              <p style={{ fontSize: "13px", color: "var(--app-muted)", marginBottom: "12px", background: "var(--app-surface-2,#f8fafc)", borderRadius: "10px", padding: "10px 14px" }}>
+                No classes found in your routine for this period.
+              </p>
+            )}
+
+            <button type="submit" className="btn primary" disabled={leaveSubmitting} style={{ minWidth: "160px" }}>
+              {leaveSubmitting ? "Submitting…" : "Submit Application"}
+            </button>
+          </form>
+        </div>
+
+        {/* ── My previous applications ── */}
+        <h3 style={{ fontSize: "14px", fontWeight: 700, color: "var(--app-text)" }}>My Applications</h3>
+        {myLeaves.length === 0 ? (
+          <p style={{ fontSize: "13px", color: "var(--app-muted)", padding: "16px 0" }}>You have no leave applications yet.</p>
+        ) : (
+          <div className="smart-table-card" style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
+              <thead>
+                <tr style={{ background: "var(--app-surface-2,#f8fafc)", borderBottom: "1px solid var(--app-border)" }}>
+                  {["Period","Reason","Status","Applied","Action"].map((h) => (
+                    <th key={h} style={{ padding: "9px 14px", textAlign: "left", fontWeight: 600, color: "var(--app-muted)", fontSize: "11.5px", textTransform: "uppercase", letterSpacing: "0.04em" }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {myLeaves.map((l) => (
+                  <tr key={l._id} style={{ borderBottom: "1px solid var(--app-border)" }}>
+                    <td style={{ padding: "9px 14px", whiteSpace: "nowrap", fontWeight: 600 }}>{fmtDate(l.fromDate)} – {fmtDate(l.toDate)}</td>
+                    <td style={{ padding: "9px 14px", maxWidth: "200px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{l.reason}</td>
+                    <td style={{ padding: "9px 14px" }}>
+                      <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold capitalize ${STATUS_BADGE[l.status] || ""}`}>{l.status}</span>
+                    </td>
+                    <td style={{ padding: "9px 14px", color: "var(--app-muted)", whiteSpace: "nowrap" }}>{fmtDate(l.createdAt)}</td>
+                    <td style={{ padding: "9px 14px" }}>
+                      <div style={{ display: "flex", gap: "6px" }}>
+                        <button className="btn soft" style={{ fontSize: "11.5px", padding: "3px 10px" }} onClick={() => setLeaveDetailModal(l)}>View</button>
+                        {l.status === "pending" && (
+                          <button className="btn danger" style={{ fontSize: "11.5px", padding: "3px 10px" }} onClick={() => handleDeleteLeave(l._id)}>Delete</button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* Detail modal */}
+        {leaveDetailModal && (
+          <Modal title="Leave Application Details" onClose={() => setLeaveDetailModal(null)}>
+            <div style={{ display: "flex", flexDirection: "column", gap: "14px", fontSize: "13.5px" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                <div><strong>From:</strong> {fmtDate(leaveDetailModal.fromDate)}</div>
+                <div><strong>To:</strong>   {fmtDate(leaveDetailModal.toDate)}</div>
+                <div className="full-span"><strong>Reason:</strong> {leaveDetailModal.reason}</div>
+                <div><strong>Status:</strong> <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold capitalize ${STATUS_BADGE[leaveDetailModal.status] || ""}`}>{leaveDetailModal.status}</span></div>
+                {leaveDetailModal.reviewNote && <div className="full-span"><strong>Admin note:</strong> {leaveDetailModal.reviewNote}</div>}
+              </div>
+              {leaveDetailModal.substitutes?.length > 0 && (
+                <>
+                  <strong style={{ fontSize: "13px" }}>Substitute Assignments:</strong>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12.5px" }}>
+                    <thead>
+                      <tr style={{ background: "var(--app-surface-2,#f8fafc)", borderBottom: "1px solid var(--app-border)" }}>
+                        {["Day","Class","Section","Subject","Time","Substitute"].map((h) => (
+                          <th key={h} style={{ padding: "7px 10px", textAlign: "left", fontWeight: 600, color: "var(--app-muted)" }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {leaveDetailModal.substitutes.map((s, i) => (
+                        <tr key={i} style={{ borderBottom: "1px solid var(--app-border)" }}>
+                          <td style={{ padding: "7px 10px", fontWeight: 600 }}>{s.day}</td>
+                          <td style={{ padding: "7px 10px" }}>{s.className}</td>
+                          <td style={{ padding: "7px 10px", color: "var(--app-muted)" }}>{s.sectionName || <em>All</em>}</td>
+                          <td style={{ padding: "7px 10px" }}>{s.subject}</td>
+                          <td style={{ padding: "7px 10px", whiteSpace: "nowrap" }}>{s.startTime} – {s.endTime}</td>
+                          <td style={{ padding: "7px 10px" }}>{s.substituteEmployeeName || <em style={{ color: "var(--app-muted)" }}>Not assigned</em>}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </>
+              )}
+              <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                <button className="btn soft" onClick={() => setLeaveDetailModal(null)}>Close</button>
+              </div>
+            </div>
+          </Modal>
+        )}
+      </div>
+    );
+  }
+
+  // ── Leave Requests (admin) ───────────────────────────────────────────────────
+  function renderLeaveRequests() {
+    const fmtDate = (d) => d ? new Date(d).toLocaleDateString("en-BD", { day: "2-digit", month: "short", year: "numeric" }) : "";
+    const STATUS_BADGE = {
+      pending:  "bg-amber-100 text-amber-700",
+      approved: "bg-emerald-100 text-emerald-700",
+      rejected: "bg-red-100 text-red-700",
+    };
+    const allLeaves = data.leaves || [];
+    const filtered  = leaveFilter === "all" ? allLeaves : allLeaves.filter((l) => l.status === leaveFilter);
+    const pending   = allLeaves.filter((l) => l.status === "pending").length;
+
+    async function handleReview() {
+      if (!leaveReviewModal) return;
+      setLeaveReviewLoading(true);
+      setError("");
+      try {
+        await erpApi.reviewLeave(token, leaveReviewModal._id, { status: leaveReviewStatus, reviewNote: leaveReviewNote });
+        setSuccess(`Leave application ${leaveReviewStatus}.`);
+        setLeaveReviewModal(null);
+        setLeaveReviewNote("");
+        setLeaveReviewStatus("approved");
+        const partial = await refreshPartialData(token, ["leaves"]);
+        setData((prev) => ({ ...prev, ...partial }));
+      } catch (err) {
+        setError(getErrorMessage(err));
+      } finally {
+        setLeaveReviewLoading(false);
+      }
+    }
+
+    async function handleDeleteLeave(id) {
+      if (!window.confirm("Delete this leave application?")) return;
+      try {
+        await erpApi.deleteLeave(token, id);
+        setData((prev) => ({ ...prev, leaves: prev.leaves.filter((l) => l._id !== id) }));
+        setSuccess("Application deleted.");
+      } catch (err) { setError(getErrorMessage(err)); }
+    }
+
+    return (
+      <div className="stack">
+        <SectionHeader
+          eyebrow="Leave Management"
+          title="Staff Leave Requests"
+          action={pending > 0 && <span className="badge-pill bg-amber-500 text-white" style={{ fontSize: "12px", padding: "2px 10px", borderRadius: "99px", fontWeight: 700 }}>{pending} Pending</span>}
+        />
+
+        {/* Status filter tabs */}
+        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+          {["all","pending","approved","rejected"].map((s) => (
+            <button key={s} type="button"
+              className={`btn ${leaveFilter === s ? "primary" : "soft"}`}
+              style={{ fontSize: "12.5px", padding: "5px 14px", textTransform: "capitalize" }}
+              onClick={() => setLeaveFilter(s)}>
+              {s === "all" ? `All (${allLeaves.length})` : `${s.charAt(0).toUpperCase() + s.slice(1)} (${allLeaves.filter(l => l.status === s).length})`}
+            </button>
+          ))}
+        </div>
+
+        {filtered.length === 0 ? (
+          <p style={{ fontSize: "13px", color: "var(--app-muted)", padding: "20px 0" }}>No leave applications found.</p>
+        ) : (
+          <div className="smart-table-card" style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
+              <thead>
+                <tr style={{ background: "var(--app-surface-2,#f8fafc)", borderBottom: "1px solid var(--app-border)" }}>
+                  {["Teacher","Period","Reason","Substitutes","Status","Applied","Action"].map((h) => (
+                    <th key={h} style={{ padding: "9px 14px", textAlign: "left", fontWeight: 600, color: "var(--app-muted)", fontSize: "11.5px", textTransform: "uppercase", letterSpacing: "0.04em" }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((l) => (
+                  <tr key={l._id} style={{ borderBottom: "1px solid var(--app-border)" }}>
+                    <td style={{ padding: "9px 14px", fontWeight: 600 }}>{l.applicantName}</td>
+                    <td style={{ padding: "9px 14px", whiteSpace: "nowrap" }}>{fmtDate(l.fromDate)} – {fmtDate(l.toDate)}</td>
+                    <td style={{ padding: "9px 14px", maxWidth: "180px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{l.reason}</td>
+                    <td style={{ padding: "9px 14px", color: "var(--app-muted)" }}>
+                      {l.substitutes?.length > 0
+                        ? `${l.substitutes.filter(s => s.substituteEmployeeName).length} / ${l.substitutes.length} assigned`
+                        : <em>None</em>}
+                    </td>
+                    <td style={{ padding: "9px 14px" }}>
+                      <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold capitalize ${STATUS_BADGE[l.status] || ""}`}>{l.status}</span>
+                    </td>
+                    <td style={{ padding: "9px 14px", color: "var(--app-muted)", whiteSpace: "nowrap" }}>{fmtDate(l.createdAt)}</td>
+                    <td style={{ padding: "9px 14px" }}>
+                      <div style={{ display: "flex", gap: "6px" }}>
+                        {l.status === "pending" ? (
+                          <button className="btn primary" style={{ fontSize: "11.5px", padding: "3px 12px" }}
+                            onClick={() => { setLeaveReviewModal(l); setLeaveReviewNote(""); setLeaveReviewStatus("approved"); }}>
+                            Review
+                          </button>
+                        ) : (
+                          <button className="btn soft" style={{ fontSize: "11.5px", padding: "3px 10px" }}
+                            onClick={() => setLeaveDetailModal(l)}>
+                            View
+                          </button>
+                        )}
+                        <button className="btn danger" style={{ fontSize: "11.5px", padding: "3px 8px" }}
+                          onClick={() => handleDeleteLeave(l._id)}>
+                          ×
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* Review modal */}
+        {leaveReviewModal && (
+          <Modal title="Review Leave Application" onClose={() => setLeaveReviewModal(null)} wide>
+            <div style={{ display: "flex", flexDirection: "column", gap: "16px", fontSize: "13.5px" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", background: "var(--app-surface-2,#f8fafc)", borderRadius: "12px", padding: "14px 16px" }}>
+                <div><strong>Teacher:</strong> {leaveReviewModal.applicantName}</div>
+                <div><strong>Status:</strong> <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold capitalize ${STATUS_BADGE[leaveReviewModal.status] || ""}`}>{leaveReviewModal.status}</span></div>
+                <div><strong>From:</strong> {fmtDate(leaveReviewModal.fromDate)}</div>
+                <div><strong>To:</strong>   {fmtDate(leaveReviewModal.toDate)}</div>
+                <div style={{ gridColumn: "1/-1" }}><strong>Reason:</strong> {leaveReviewModal.reason}</div>
+              </div>
+
+              {leaveReviewModal.substitutes?.length > 0 && (
+                <div>
+                  <strong style={{ fontSize: "13px", display: "block", marginBottom: "8px" }}>Substitute Assignments:</strong>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12.5px" }}>
+                    <thead>
+                      <tr style={{ background: "var(--app-surface-2,#f8fafc)", borderBottom: "1px solid var(--app-border)" }}>
+                        {["Day","Class","Section","Subject","Time","Substitute Teacher"].map((h) => (
+                          <th key={h} style={{ padding: "7px 10px", textAlign: "left", fontWeight: 600, color: "var(--app-muted)" }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {leaveReviewModal.substitutes.map((s, i) => (
+                        <tr key={i} style={{ borderBottom: "1px solid var(--app-border)" }}>
+                          <td style={{ padding: "7px 10px", fontWeight: 600 }}>{s.day}</td>
+                          <td style={{ padding: "7px 10px" }}>{s.className}</td>
+                          <td style={{ padding: "7px 10px" }}>{s.sectionName || <em style={{ color: "var(--app-muted)" }}>All</em>}</td>
+                          <td style={{ padding: "7px 10px" }}>{s.subject}</td>
+                          <td style={{ padding: "7px 10px", whiteSpace: "nowrap" }}>{s.startTime} – {s.endTime}</td>
+                          <td style={{ padding: "7px 10px" }}>
+                            {s.substituteEmployeeName
+                              ? <strong style={{ color: "var(--app-success,#059669)" }}>{s.substituteEmployeeName}</strong>
+                              : <em style={{ color: "var(--app-danger,#dc2626)" }}>Not assigned</em>}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {leaveReviewModal.status === "pending" && (
+                <div style={{ display: "flex", flexDirection: "column", gap: "10px", borderTop: "1px solid var(--app-border)", paddingTop: "14px" }}>
+                  <div style={{ display: "flex", gap: "8px" }}>
+                    {["approved","rejected"].map((s) => (
+                      <button key={s} type="button"
+                        className={`btn ${leaveReviewStatus === s ? (s === "approved" ? "primary" : "danger") : "soft"}`}
+                        style={{ flex: 1, textTransform: "capitalize", fontSize: "13px" }}
+                        onClick={() => setLeaveReviewStatus(s)}>
+                        {s}
+                      </button>
+                    ))}
+                  </div>
+                  <textarea className="control" rows={2} placeholder="Note for the teacher (optional)"
+                    value={leaveReviewNote} onChange={(e) => setLeaveReviewNote(e.target.value)} />
+                  <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end" }}>
+                    <button className="btn soft" onClick={() => setLeaveReviewModal(null)}>Cancel</button>
+                    <button className={`btn ${leaveReviewStatus === "approved" ? "primary" : "danger"}`}
+                      disabled={leaveReviewLoading} onClick={handleReview} style={{ minWidth: "120px" }}>
+                      {leaveReviewLoading ? "Saving…" : `Confirm ${leaveReviewStatus.charAt(0).toUpperCase() + leaveReviewStatus.slice(1)}`}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {leaveReviewModal.status !== "pending" && (
+                <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                  <button className="btn soft" onClick={() => setLeaveReviewModal(null)}>Close</button>
+                </div>
+              )}
+            </div>
+          </Modal>
+        )}
+
+        {/* Detail view for non-pending */}
+        {leaveDetailModal && (
+          <Modal title="Leave Application Details" onClose={() => setLeaveDetailModal(null)}>
+            <div style={{ display: "flex", flexDirection: "column", gap: "14px", fontSize: "13.5px" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                <div><strong>Teacher:</strong> {leaveDetailModal.applicantName}</div>
+                <div><strong>Status:</strong> <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold capitalize ${STATUS_BADGE[leaveDetailModal.status] || ""}`}>{leaveDetailModal.status}</span></div>
+                <div><strong>From:</strong> {fmtDate(leaveDetailModal.fromDate)}</div>
+                <div><strong>To:</strong>   {fmtDate(leaveDetailModal.toDate)}</div>
+                <div className="full-span"><strong>Reason:</strong> {leaveDetailModal.reason}</div>
+                {leaveDetailModal.reviewNote && <div className="full-span"><strong>Admin note:</strong> {leaveDetailModal.reviewNote}</div>}
+              </div>
+              {leaveDetailModal.substitutes?.length > 0 && (
+                <>
+                  <strong style={{ fontSize: "13px" }}>Substitute Assignments:</strong>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12.5px" }}>
+                    <thead>
+                      <tr style={{ background: "var(--app-surface-2,#f8fafc)", borderBottom: "1px solid var(--app-border)" }}>
+                        {["Day","Class","Section","Subject","Time","Substitute"].map((h) => (
+                          <th key={h} style={{ padding: "7px 10px", textAlign: "left", fontWeight: 600, color: "var(--app-muted)" }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {leaveDetailModal.substitutes.map((s, i) => (
+                        <tr key={i} style={{ borderBottom: "1px solid var(--app-border)" }}>
+                          <td style={{ padding: "7px 10px", fontWeight: 600 }}>{s.day}</td>
+                          <td style={{ padding: "7px 10px" }}>{s.className}</td>
+                          <td style={{ padding: "7px 10px", color: "var(--app-muted)" }}>{s.sectionName || <em>All</em>}</td>
+                          <td style={{ padding: "7px 10px" }}>{s.subject}</td>
+                          <td style={{ padding: "7px 10px", whiteSpace: "nowrap" }}>{s.startTime} – {s.endTime}</td>
+                          <td style={{ padding: "7px 10px" }}>{s.substituteEmployeeName || <em style={{ color: "var(--app-muted)" }}>Not assigned</em>}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </>
+              )}
+              <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                <button className="btn soft" onClick={() => setLeaveDetailModal(null)}>Close</button>
+              </div>
+            </div>
+          </Modal>
+        )}
+      </div>
+    );
+  }
 
   // ── Academic Calendar (all roles) ───────────────────────────────────────────
   const renderAcademicCalendar = () => {
@@ -4376,6 +4982,8 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
       {activeView === "settings" && user.role !== "student" && renderSettings()}
       {activeView === "teachers" && user.role === "student" && renderTeachers()}
       {activeView === "academicCalendar" && renderAcademicCalendar()}
+      {activeView === "leaveApply"    && ["teacher","staff"].includes(user.role) && renderLeaveApply()}
+      {activeView === "leaveRequests" && isAdmin && renderLeaveRequests()}
 
       {profileStudent && (() => {
         const classColors = { "Play": "#7c3aed", "Nursery": "#0891b2", "KG": "#0d9488", "Class 1": "#2563eb", "Class 2": "#7c3aed", "Class 3": "#059669", "Class 4": "#d97706", "Class 5": "#dc2626", "Class 6": "#4f46e5", "Class 7": "#0891b2", "Class 8": "#0d9488" };
@@ -5216,51 +5824,6 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
                 <Field label="New Password"><input className="control" minLength="6" type="password" value={form.newPassword || ""} onChange={(e) => setForm({ ...form, newPassword: e.target.value })} /></Field>
                 <Field label="Confirm Password"><input className="control" minLength="6" type="password" value={form.confirmPassword || ""} onChange={(e) => setForm({ ...form, confirmPassword: e.target.value })} /></Field>
 
-                {/* ── Biometric / Windows Hello ────────────────────────── */}
-                {webauthnSupported && (
-                  <div className="full-span" style={{ borderTop: "1px solid #e2e8f0", paddingTop: 18, marginTop: 4 }}>
-                    <strong style={{ fontSize: 13, color: "#0f172a", display: "block", marginBottom: 4 }}>
-                      Fingerprint / Windows Hello
-                    </strong>
-                    <p style={{ fontSize: 12, color: "var(--edu-muted)", marginBottom: 12 }}>
-                      Register your fingerprint or Windows Hello so you can log in without a password.
-                    </p>
-
-                    {/* Registered credentials */}
-                    {webauthnCredentials.length > 0 && (
-                      <div style={{ marginBottom: 12, display: "flex", flexDirection: "column", gap: 6 }}>
-                        {webauthnCredentials.map((c) => (
-                          <div key={c.credentialID} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "#f1f5f9", borderRadius: 8, padding: "6px 12px", fontSize: 12 }}>
-                            <span>
-                              <strong>{c.deviceName || "Device"}</strong>
-                              <span style={{ color: "var(--edu-muted)", marginLeft: 8 }}>
-                                {c.addedAt ? new Date(c.addedAt).toLocaleDateString() : ""}
-                              </span>
-                            </span>
-                            <button type="button" className="btn danger" style={{ fontSize: 11, padding: "2px 10px" }} onClick={() => removeBiometric(c.credentialID)}>Remove</button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    <button
-                      type="button"
-                      className="btn outline"
-                      disabled={webauthnLoading}
-                      onClick={registerBiometric}
-                      style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 13 }}
-                    >
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ width: 16, height: 16 }}>
-                        <path d="M12 11c0 3.517-1.009 6.799-2.753 9.571m-3.44-2.04.054-.09A13.916 13.916 0 0 0 8 11a4 4 0 1 1 8 0c0 1.017-.07 2.019-.203 3m-2.118 6.844A21.88 21.88 0 0 0 15.171 17m3.839 1.132c.645-2.266.99-4.659.99-7.132A8 8 0 0 0 8 4.07M3 15.364c.64-1.319 1-2.8 1-4.364 0-1.457.39-2.823 1.07-4" />
-                      </svg>
-                      {webauthnLoading ? "Waiting for biometric..." : webauthnCredentials.length > 0 ? "Add Another Device" : "Register Fingerprint / Windows Hello"}
-                    </button>
-
-                    {webauthnStatus === "success" && <p className="alert success" style={{ marginTop: 10, fontSize: 12 }}>Biometric registered! You can now log in with your fingerprint.</p>}
-                    {webauthnStatus === "cancelled" && <p className="alert error" style={{ marginTop: 10, fontSize: 12 }}>Cancelled. Please try again.</p>}
-                    {webauthnStatus.startsWith("error:") && <p className="alert error" style={{ marginTop: 10, fontSize: 12 }}>{webauthnStatus.slice(6)}</p>}
-                  </div>
-                )}
               </div>
             )}
 
@@ -5405,6 +5968,98 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
           </form>
         </Modal>
       )}
+
+      {/* ── Pay All Salaries confirmation modal ─────────────────────────── */}
+      {payAllModal && isAdmin && (() => {
+        const activeEmps = data.employees.filter((e) => e.status === "active" && Number(e.salaryAmount || 0) > 0);
+        const totalAmt   = activeEmps.reduce((s, e) => s + Number(e.salaryAmount || 0), 0);
+        const alreadyPaid = data.salaries.filter(
+          (s) => s.salaryMonth === payAllMonth && s.status === "paid"
+        ).length;
+
+        const handlePayAll = async () => {
+          if (payAllLoading) return;
+          setPayAllLoading(true);
+          try {
+            const { data: res } = await erpApi.payAllSalaries(token, { month: payAllMonth, note: payAllNote || "Bulk salary payment" });
+            showDoneAlert(`${res.paid} salary payments processed for ${payAllMonth}.`);
+            await refreshPartialData(token, ["salaries", "employees"]);
+            setPayAllModal(false);
+          } catch (err) {
+            setError(getErrorMessage(err));
+          } finally {
+            setPayAllLoading(false);
+          }
+        };
+
+        return (
+          <Modal title="Pay All Salaries" onClose={() => !payAllLoading && setPayAllModal(false)}>
+            {/* Summary banner */}
+            <div style={{ background: "color-mix(in srgb, var(--app-warning,#d97706) 12%, transparent)", border: "1px solid color-mix(in srgb, var(--app-warning,#d97706) 35%, transparent)", borderRadius: "10px", padding: "14px 16px", marginBottom: "18px", display: "flex", alignItems: "flex-start", gap: "10px" }}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#d97706" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: "1px" }}>
+                <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+              </svg>
+              <div style={{ fontSize: "13.5px", lineHeight: "1.5" }}>
+                This will mark <strong>{activeEmps.length} active employee{activeEmps.length !== 1 ? "s" : ""}</strong> as fully paid for the selected month.<br />
+                Total disbursement: <strong style={{ color: "var(--app-success,#059669)" }}>{money.format(totalAmt)}</strong>
+                {alreadyPaid > 0 && <><br /><span style={{ color: "var(--app-warning,#d97706)" }}>⚠ {alreadyPaid} record{alreadyPaid !== 1 ? "s" : ""} already paid this month will be overwritten.</span></>}
+              </div>
+            </div>
+
+            {/* Employee preview list */}
+            <div style={{ maxHeight: "200px", overflowY: "auto", border: "1px solid var(--app-border)", borderRadius: "8px", marginBottom: "16px" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12.5px" }}>
+                <thead>
+                  <tr style={{ background: "var(--app-surface-2,#f8fafc)", position: "sticky", top: 0 }}>
+                    {["Employee", "Role", "Salary"].map((h) => (
+                      <th key={h} style={{ padding: "7px 10px", textAlign: "left", fontWeight: 600, color: "var(--app-muted)", borderBottom: "1px solid var(--app-border)" }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {activeEmps.map((e) => (
+                    <tr key={e._id} style={{ borderBottom: "1px solid var(--app-border)" }}>
+                      <td style={{ padding: "7px 10px", fontWeight: 500 }}>{e.name}</td>
+                      <td style={{ padding: "7px 10px", textTransform: "capitalize", color: "var(--app-muted)" }}>{e.role}</td>
+                      <td style={{ padding: "7px 10px", fontWeight: 600, color: "var(--app-success,#059669)" }}>{money.format(e.salaryAmount)}</td>
+                    </tr>
+                  ))}
+                  {activeEmps.length === 0 && (
+                    <tr><td colSpan={3} style={{ padding: "14px 10px", textAlign: "center", color: "var(--app-muted)" }}>No active employees with salary set.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Month + note */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: "12px", marginBottom: "18px" }}>
+              <div>
+                <label style={{ display: "block", fontWeight: 600, fontSize: "12.5px", marginBottom: "5px", color: "var(--app-muted)" }}>Salary Month</label>
+                <input className="control" type="month" value={payAllMonth} onChange={(e) => setPayAllMonth(e.target.value)} style={{ width: "100%" }} />
+              </div>
+              <div>
+                <label style={{ display: "block", fontWeight: 600, fontSize: "12.5px", marginBottom: "5px", color: "var(--app-muted)" }}>Payment Note</label>
+                <input className="control" type="text" placeholder="e.g. Monthly salary disbursement" value={payAllNote} onChange={(e) => setPayAllNote(e.target.value)} style={{ width: "100%" }} />
+              </div>
+            </div>
+
+            <div className="modal-actions">
+              <button className="btn soft" type="button" disabled={payAllLoading} onClick={() => setPayAllModal(false)}>Cancel</button>
+              <button
+                className="btn warn"
+                type="button"
+                disabled={payAllLoading || activeEmps.length === 0}
+                onClick={handlePayAll}
+                style={{ minWidth: "180px" }}
+              >
+                {payAllLoading
+                  ? "Processing…"
+                  : `Pay ${activeEmps.length} Employee${activeEmps.length !== 1 ? "s" : ""} · ${money.format(totalAmt)}`}
+              </button>
+            </div>
+          </Modal>
+        );
+      })()}
     </AdminLayout>
   );
 }

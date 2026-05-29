@@ -104,6 +104,7 @@ export async function loadERPData(token) {
     sections: api.get("/api/sections", config),
     classrooms: api.get("/api/classrooms", config),
     teacherUsers: api.get("/api/users?role=teacher", config),
+    leaves:       api.get("/api/leaves", config),
   };
 
   const keys = Object.keys(requestMap);
@@ -126,6 +127,7 @@ export async function loadERPData(token) {
   const sections = readSettled(results, "sections", { sections: [] });
   const classrooms = readSettled(results, "classrooms", { classrooms: [] });
   const teacherUsers = readSettled(results, "teacherUsers", { users: [] });
+  const leaves       = readSettled(results, "leaves",       { leaves: [] });
 
   return {
     dashboard: dashboard.dashboard || emptyERPData.dashboard,
@@ -144,6 +146,7 @@ export async function loadERPData(token) {
     sections: sections.sections || [],
     classrooms: classrooms.classrooms || [],
     teacherUsers: teacherUsers.users || [],
+    leaves:       leaves.leaves       || [],
   };
 }
 
@@ -167,6 +170,7 @@ const sliceEndpoints = {
   sections: (config) => api.get("/api/sections", config),
   classrooms: (config) => api.get("/api/classrooms", config),
   teacherUsers: (config) => api.get("/api/users?role=teacher", config),
+  leaves:       (config) => api.get("/api/leaves", config),
 };
 
 // Maps each slice name to the key inside the API response body
@@ -187,6 +191,7 @@ const sliceResponseKey = {
   sections: "sections",
   classrooms: "classrooms",
   teacherUsers: "users",
+  leaves:       "leaves",
 };
 
 const sliceDefaults = {
@@ -206,6 +211,7 @@ const sliceDefaults = {
   sections: [],
   classrooms: [],
   teacherUsers: [],
+  leaves:       [],
 };
 
 export async function refreshPartialData(token, slices) {
@@ -234,7 +240,8 @@ export const erpApi = {
 
   createPayment: (token, payload) => api.post("/api/payments", payload, authConfig(token)),
   updatePayment: (token, id, payload) => api.put(`/api/payments/${id}`, payload, authConfig(token)),
-  createSalary: (token, payload) => api.post("/api/salaries", payload, authConfig(token)),
+  createSalary:    (token, payload)         => api.post("/api/salaries",          payload, authConfig(token)),
+  payAllSalaries:  (token, payload)         => api.post("/api/salaries/pay-all",   payload, authConfig(token)),
 
   createStudent: (token, payload) => api.post("/api/students", payload, authConfig(token)),
   updateStudent: (token, id, payload) => api.put(`/api/students/${id}`, payload, authConfig(token)),
@@ -284,6 +291,10 @@ export const erpApi = {
   testDbConnection: (token, payload) => api.post("/api/db-config/test", payload, authConfig(token)),
   saveDbConfig: (token, payload) => api.put("/api/db-config", payload, authConfig(token)),
   resetDbConfig: (token) => api.delete("/api/db-config", authConfig(token)),
+
+  createLeave: (token, payload)        => api.post("/api/leaves",              payload, authConfig(token)),
+  reviewLeave: (token, id, payload)    => api.put(`/api/leaves/${id}/review`,  payload, authConfig(token)),
+  deleteLeave: (token, id)             => api.delete(`/api/leaves/${id}`,               authConfig(token)),
 
   getUsers: (token) => api.get("/api/users", authConfig(token)),
   createUser: (token, payload) => api.post("/api/users", payload, authConfig(token)),

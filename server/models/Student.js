@@ -60,5 +60,6 @@ const studentSchema = new mongoose.Schema(
 );
 
 studentSchema.index({ className: 1, rollNumber: 1 }, { unique: true });
+studentSchema.index({ status: 1, className: 1 });
 
 module.exports = mongoose.model("Student", studentSchema);

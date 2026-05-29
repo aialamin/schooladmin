@@ -1,3 +1,4 @@
+const compression = require("compression");
 const cors = require("cors");
 const express = require("express");
 const path = require("path");
@@ -22,6 +23,7 @@ const expenseRoutes = require("./routes/expenseRoutes");
 const sectionRoutes = require("./routes/sectionRoutes");
 const classroomRoutes = require("./routes/classroomRoutes");
 const dbConfigRoutes = require("./routes/dbConfigRoutes");
+const leaveRoutes    = require("./routes/leaveRoutes");
 
 const app = express();
 
@@ -31,6 +33,8 @@ const corsOptions = corsOrigin === "*"
   : { origin: corsOrigin.split(",").map((origin) => origin.trim()).filter(Boolean) };
 
 app.use(cors(corsOptions));
+// Gzip compress all responses — reduces JSON payload size by 60-80%
+app.use(compression());
 app.use(express.json({ limit: "5mb" }));
 
 // Safety net for older frontend builds or misconfigured env values that send /api/api/...
@@ -63,6 +67,7 @@ app.use("/api/expenses", expenseRoutes);
 app.use("/api/sections", sectionRoutes);
 app.use("/api/classrooms", classroomRoutes);
 app.use("/api/db-config", dbConfigRoutes);
+app.use("/api/leaves",    leaveRoutes);
 
 // Serve the built React frontend when running only the backend server.
 const clientDistPath = path.join(__dirname, "..", "client", "dist");

@@ -18,11 +18,15 @@ export default defineConfig({
   build: {
     outDir: "dist",
     emptyOutDir: true,
+    // Raise warning threshold — Dashboard is intentionally large
+    chunkSizeWarningLimit: 1200,
     rollupOptions: {
       output: {
         manualChunks: {
-          router: ["react-router-dom"],
-          http: ["axios"],
+          // React core never changes between deploys — cached permanently by browser
+          vendor:  ["react", "react-dom"],
+          router:  ["react-router-dom"],
+          http:    ["axios"],
         },
       },
     },

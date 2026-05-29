@@ -36,6 +36,8 @@ const navSections = [
       { key: "classwiseResults", label: "Class Results", icon: "classwiseResults", allowedRoles: NON_STUDENT },
       { key: "routines", label: "Routine", icon: "calendar" },
       { key: "academicCalendar", label: "Calendar", icon: "calendarEvent" },
+      { key: "leaveApply",    label: "Apply Leave",     icon: "leave", allowedRoles: ["teacher", "staff"] },
+      { key: "leaveRequests", label: "Leave Requests",  icon: "leave", allowedRoles: ["admin"] },
     ],
   },
   {
@@ -70,6 +72,8 @@ const viewDescriptions = {
   settings: "Profile, appearance, school, and app settings.",
   academicCalendar: "Monthly calendar view with exam periods, class days, and the academic year.",
   teachers: "Directory of all teachers — subjects, assigned classes, and contact info.",
+  leaveApply:    "Submit a leave or absence application with substitute teacher assignments.",
+  leaveRequests: "Review, approve, or reject staff leave applications.",
 };
 
 function Icon({ name }) {
@@ -98,6 +102,7 @@ function Icon({ name }) {
     user: <><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z"/><path d="M4 21c.8-4.2 3.5-6.5 8-6.5s7.2 2.3 8 6.5"/></>,
     help: <><circle cx="12" cy="12" r="9"/><path d="M9.6 9a2.6 2.6 0 0 1 4.8 1.4c0 1.9-2.4 2.1-2.4 4"/><path d="M12 18h.01"/></>,
     logout: <><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></>,
+    leave: <><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 12h6"/><path d="M9 16h4"/><path d="M15 16l1.5 1.5L19 14"/></>,
     close: <><path d="m6 6 12 12"/><path d="M18 6 6 18"/></>,
     chevron: <><path d="m6 9 6 6 6-6"/></>,
   };
@@ -321,21 +326,23 @@ export default function AdminLayout({ activeView, children, onLogout, onOpenUser
 
       <button aria-label="Close navigation menu" className="mobile-menu-backdrop" type="button" onClick={() => setIsMobileMenuOpen(false)} />
       <aside id="mobile-app-menu" aria-label="Mobile navigation" className="mobile-menu-drawer" aria-hidden={!isMobileMenuOpen}>
+
+        {/* User panel — matches desktop sidebar-user-panel */}
         <div className="mobile-menu-head">
-          <div className="app-brand-simple" />
-          <div className="sidebar-user-simple">
+          <button type="button" className="sidebar-avatar-btn" onClick={() => { setIsMobileMenuOpen(false); onOpenUserSettings(); }} title="Profile settings">
             <UserAvatar user={user} />
-            <div className="sidebar-user-copy">
-              <span>Hello</span>
-              <strong>{user?.name || "User"}</strong>
-              <small>{user?.role || "user"}</small>
-            </div>
+          </button>
+          <div className="sidebar-user-copy">
+            <span>Hello,</span>
+            <strong>{user?.name || "User"}</strong>
+            <small>{user?.role || "user"}</small>
           </div>
           <button aria-label="Close menu" className="mobile-menu-close" type="button" onClick={() => setIsMobileMenuOpen(false)}>
             <Icon name="close" />
           </button>
         </div>
 
+        {/* Nav — matches desktop modern-sidebar-nav including Appearance section */}
         <nav className="mobile-menu-nav" aria-label="School modules on mobile">
           {visibleNavSections.map((section) => (
             <div className="nav-section" key={section.title}>
@@ -348,14 +355,35 @@ export default function AdminLayout({ activeView, children, onLogout, onOpenUser
               ))}
             </div>
           ))}
+          {/* Appearance section — matches desktop */}
+          <div className="nav-section">
+            <span className="nav-section-title">Appearance</span>
+            <button
+              aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+              className="nav-button"
+              type="button"
+              title={theme === "dark" ? "Light mode" : "Dark mode"}
+              onClick={() => onThemeChange(theme === "dark" ? "light" : "dark")}
+            >
+              <span className="nav-icon"><Icon name={theme === "dark" ? "sun" : "moon"} /></span>
+              <span className="nav-text">{theme === "dark" ? "Light Mode" : "Dark Mode"}</span>
+            </button>
+            <button aria-label="Help" data-label="Help" className="nav-button" type="button" title="Help" onClick={() => { setIsMobileMenuOpen(false); handleViewChange("dashboard"); }}>
+              <span className="nav-icon"><Icon name="help" /></span>
+              <span className="nav-text">Help</span>
+            </button>
+          </div>
         </nav>
 
+        {/* Bottom actions — Settings + Logout side by side */}
         <div className="mobile-menu-footer">
-          <button className="nav-button" type="button" onClick={() => handleViewChange("settings")}>
-            <span className="nav-icon"><Icon name="help" /></span>
-            <span className="nav-text">Help</span>
-          </button>
-          <button className="nav-button logout-nav" type="button" onClick={handleLogout}>
+          {canOpenSettings(user) && (
+            <button aria-label="Settings" data-label="Settings" className={activeView === "settings" ? "nav-button active" : "nav-button"} type="button" title="Settings" onClick={() => { setIsMobileMenuOpen(false); handleViewChange("settings"); }}>
+              <span className="nav-icon"><Icon name="settings" /></span>
+              <span className="nav-text">Settings</span>
+            </button>
+          )}
+          <button aria-label="Logout" data-label="Logout" className="nav-button logout-nav" type="button" title="Logout" onClick={handleLogout}>
             <span className="nav-icon"><Icon name="logout" /></span>
             <span className="nav-text">Logout</span>
           </button>
