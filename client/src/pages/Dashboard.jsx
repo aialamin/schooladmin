@@ -773,8 +773,15 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
   // Pay-all salaries modal
   const [payAllModal, setPayAllModal]     = useState(false);
   const [payAllMonth, setPayAllMonth]     = useState(currentMonth);
+  const [payAllBonus, setPayAllBonus]     = useState(0);
   const [payAllNote, setPayAllNote]       = useState("");
   const [payAllLoading, setPayAllLoading] = useState(false);
+
+  // Pay single employee due modal
+  const [payEmpModal, setPayEmpModal]     = useState(null);  // null | employee object
+  const [payEmpBonus, setPayEmpBonus]     = useState(0);
+  const [payEmpNote, setPayEmpNote]       = useState("");
+  const [payEmpLoading, setPayEmpLoading] = useState(false);
 
   // Database configuration state (admin only)
   const [dbConfig, setDbConfig] = useState(null);
@@ -1189,7 +1196,7 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
     } finally {
       setBiometricScanning(false);
     }
-  }, [biometricEmployee, token, refresh]);
+  }, [biometricEmployee, token, refreshPartialData, setData]);
 
   async function handleEnrollBiometric(employeeId) {
     setEnrollLoading(employeeId);
@@ -1246,6 +1253,7 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
         const { data: response } = editingId ? await erpApi.updatePayment(token, editingId, form) : await erpApi.createPayment(token, form);
         showDoneAlert(editingId ? "Student payment updated. Receipt opened for PDF/print." : "Student payment recorded. Receipt opened for PDF/print.");
         if (response.payment && !writePrintDocument(receiptWindow, studentPaymentReceiptHtml(response.payment, schoolSettings))) {
+          receiptWindow?.close();
           setError("Popup was blocked. Use the PDF button in the payment ledger.");
         }
       }
@@ -1269,6 +1277,7 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
         const { data: response } = await erpApi.createSalary(token, form);
         showDoneAlert("Salary payment recorded. Receipt opened for PDF/print.");
         if (response.salary && !writePrintDocument(receiptWindow, salaryPaymentReceiptHtml(response.salary, schoolSettings))) {
+          receiptWindow?.close();
           setError("Popup was blocked. Use the PDF button in the salary ledger.");
         }
       }
@@ -1740,15 +1749,30 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
     },
     { key: "salaryType", label: "Salary Type", render: (row) => <span className="capitalize">{row.salaryType}</span> },
     { key: "salary", label: "Salary", render: (row) => money.format(row.salaryAmount || 0) },
-    { key: "due", label: "Due Salary", render: (row) => <span className="danger-text">{money.format(row.dueSalary || 0)}</span> },
+    { key: "due", label: "Due Salary", render: (row) => {
+      const due = Number(row.dueSalary || 0);
+      return due > 0
+        ? <span style={{ color: "var(--app-danger,#dc2626)", fontWeight: 700 }}>{money.format(due)}</span>
+        : <span style={{ color: "var(--app-success,#059669)", fontSize: "13px" }}>✓ Paid</span>;
+    }},
     { key: "status", label: "Status", render: (row) => <Status status={row.status} /> },
     { key: "actions", label: "Actions", render: (row) => financeAllowed && (
       <div className="action-row compact">
         <ActionButton icon="edit" label="Edit employee" onClick={() => openModal("employee", row)} />
         {isAdmin && <ActionButton icon="delete" label="Delete employee" tone="danger" onClick={() => handleDelete("employee", row._id)} />}
+        {Number(row.dueSalary || 0) > 0 && (
+          <button
+            className="btn success"
+            style={{ fontSize: "12px", fontWeight: 700, padding: "5px 16px", borderRadius: "8px", letterSpacing: "0.02em" }}
+            title={`Pay all due salary for ${row.name}`}
+            onClick={() => { setPayEmpModal(row); setPayEmpBonus(0); setPayEmpNote(""); }}
+          >
+            Pay
+          </button>
+        )}
       </div>
     )},
-  ], [openModal, handleDelete, isAdmin, financeAllowed]);
+  ], [openModal, handleDelete, isAdmin, financeAllowed, setPayEmpModal, setPayEmpBonus, setPayEmpNote]);
 
   const classTeachersColumns = useMemo(() => [
     { key: "name", label: "Teacher", search: (row) => `${row.name} ${row.contactInfo?.email || ""}`, render: (row) => <div><strong>{row.name}</strong><small>{row.contactInfo?.email || "No email"}</small></div> },
@@ -1811,19 +1835,52 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
   ], [isAdmin, openModal, handleDelete]);
 
   const salariesColumns = useMemo(() => [
-    { key: "employee", label: "Employee", render: (row) => row.employee?.name || "Employee" },
-    { key: "month", label: "Month", render: (row) => row.salaryMonth },
-    { key: "amount", label: "Amount", render: (row) => money.format(row.amount || 0) },
-    { key: "bonus", label: "Bonus", render: (row) => money.format(row.bonusAmount || 0) },
-    { key: "paid", label: "Paid", render: (row) => money.format(row.paidAmount || 0) },
-    { key: "due", label: "Due", render: (row) => money.format(row.dueAmount || 0) },
-    { key: "status", label: "Status", render: (row) => <Status status={row.status} /> },
-    { key: "actions", label: "PDF", render: (row) => (
-      <ActionButton icon="pdf" label="Download salary receipt PDF" onClick={() => {
-        if (!downloadSalaryPaymentReceipt(row, schoolSettings)) setError("Popup was blocked. Please allow popups and try again.");
-      }} />
+    { key: "employee", label: "Employee", render: (row) => (
+      <div>
+        <strong>{row.employee?.name || "Employee"}</strong>
+        <small className="capitalize">{row.employee?.role || ""}</small>
+      </div>
     )},
-  ], [schoolSettings]);
+    { key: "month",  label: "Month",  render: (row) => row.salaryMonth },
+    { key: "amount", label: "Amount", render: (row) => money.format(row.amount || 0) },
+    { key: "bonus",  label: "Bonus",  render: (row) => Number(row.bonusAmount || 0) > 0
+      ? <span style={{ color: "var(--app-primary,#2563eb)", fontWeight: 600 }}>{money.format(row.bonusAmount)}</span>
+      : <span style={{ color: "var(--app-muted)" }}>—</span>
+    },
+    { key: "paid", label: "Paid", render: (row) => (
+      <span style={{ color: Number(row.paidAmount || 0) > 0 ? "var(--app-success,#059669)" : "var(--app-muted)", fontWeight: Number(row.paidAmount || 0) > 0 ? 600 : 400 }}>
+        {money.format(row.paidAmount || 0)}
+      </span>
+    )},
+    { key: "due", label: "Due", render: (row) => {
+      const due = Number(row.dueAmount || 0);
+      return due > 0
+        ? <span style={{ color: "var(--app-danger,#dc2626)", fontWeight: 700, background: "color-mix(in srgb,#dc2626 10%,transparent)", padding: "2px 8px", borderRadius: "6px" }}>{money.format(due)}</span>
+        : <span style={{ color: "var(--app-success,#059669)", fontWeight: 600 }}>✓ Clear</span>;
+    }},
+    { key: "status", label: "Status", render: (row) => <Status status={row.status} /> },
+    { key: "actions", label: "Actions", render: (row) => (
+      <div className="action-row compact">
+        <ActionButton icon="pdf" label="Download salary receipt PDF" onClick={() => {
+          if (!downloadSalaryPaymentReceipt(row, schoolSettings)) setError("Popup was blocked. Please allow popups and try again.");
+        }} />
+        {financeAllowed && Number(row.dueAmount || 0) > 0 && (() => {
+          const empId = row.employee?._id || row.employee;
+          const emp   = data.employees.find((e) => String(e._id) === String(empId));
+          return emp ? (
+            <button
+              className="btn success"
+              style={{ fontSize: "12px", fontWeight: 700, padding: "5px 16px", borderRadius: "8px", letterSpacing: "0.02em" }}
+              title={`Pay all due for ${emp.name}`}
+              onClick={() => { setPayEmpModal(emp); setPayEmpBonus(0); setPayEmpNote(""); }}
+            >
+              Pay
+            </button>
+          ) : null;
+        })()}
+      </div>
+    )},
+  ], [schoolSettings, financeAllowed, data.employees, setPayEmpModal, setPayEmpBonus, setPayEmpNote]);
 
   const incrementsColumns = useMemo(() => [
     { key: "employee", label: "Employee", render: (row) => row.employee?.name || "Employee" },
@@ -2413,7 +2470,7 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
     const teacherSectionClasses = user.role === "teacher"
       ? new Set(data.sections.filter((s) => {
           const tid = s.classTeacher?._id || s.classTeacher;
-          return tid === user.id;
+          return String(tid) === String(user._id || user.id);
         }).map((s) => s.className))
       : null;
 
@@ -3099,6 +3156,24 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
           </>
         )}
       />
+      {/* Dues summary strip */}
+      {(() => {
+        const withDues = data.employees.filter((e) => e.status === "active" && Number(e.dueSalary || 0) > 0);
+        if (!withDues.length || !financeAllowed) return null;
+        const totalDue = withDues.reduce((s, e) => s + Number(e.dueSalary), 0);
+        return (
+          <div style={{ background: "color-mix(in srgb,#dc2626 8%,transparent)", border: "1.5px solid color-mix(in srgb,#dc2626 28%,transparent)", borderRadius: "10px", padding: "10px 16px", display: "flex", alignItems: "center", gap: "10px" }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#dc2626" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+              <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+            </svg>
+            <span style={{ fontSize: "13.5px", color: "var(--app-danger,#dc2626)", fontWeight: 600 }}>
+              {withDues.length} unpaid &mdash; Total Due:&nbsp;
+            </span>
+            <strong style={{ fontSize: "14px", color: "var(--app-danger,#dc2626)" }}>{money.format(totalDue)}</strong>
+          </div>
+        );
+      })()}
+
       <DataTable columns={salariesColumns} rows={data.salaries} />
       <SectionHeader eyebrow="Teacher/Employee Increment" title="Salary Increment History" />
       <DataTable columns={incrementsColumns} rows={data.increments} />
@@ -3284,7 +3359,7 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
           };
         });
         await erpApi.createLeave(token, { fromDate: leaveForm.fromDate, toDate: leaveForm.toDate, reason: leaveForm.reason, substitutes });
-        setSuccess("Leave application submitted successfully.");
+        showDoneAlert("Leave application submitted successfully.");
         setLeaveForm({ fromDate: "", toDate: "", reason: "" });
         setLeaveSubstitutes({});
         setLeaveSections({});
@@ -3302,7 +3377,7 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
       try {
         await erpApi.deleteLeave(token, id);
         setData((prev) => ({ ...prev, leaves: prev.leaves.filter((l) => l._id !== id) }));
-        setSuccess("Application deleted.");
+        showDoneAlert("Application deleted.");
       } catch (err) { setError(getErrorMessage(err)); }
     }
 
@@ -3505,7 +3580,7 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
       setError("");
       try {
         await erpApi.reviewLeave(token, leaveReviewModal._id, { status: leaveReviewStatus, reviewNote: leaveReviewNote });
-        setSuccess(`Leave application ${leaveReviewStatus}.`);
+        showDoneAlert(`Leave application ${leaveReviewStatus}.`);
         setLeaveReviewModal(null);
         setLeaveReviewNote("");
         setLeaveReviewStatus("approved");
@@ -3523,7 +3598,7 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
       try {
         await erpApi.deleteLeave(token, id);
         setData((prev) => ({ ...prev, leaves: prev.leaves.filter((l) => l._id !== id) }));
-        setSuccess("Application deleted.");
+        showDoneAlert("Application deleted.");
       } catch (err) { setError(getErrorMessage(err)); }
     }
 
@@ -4346,7 +4421,7 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
     if (user.role !== "teacher") return data.students;
     const mySectionClasses = new Set(
       data.sections
-        .filter((s) => (s.classTeacher?._id || s.classTeacher) === user.id)
+        .filter((s) => String(s.classTeacher?._id || s.classTeacher) === String(user._id || user.id))
         .map((s) => s.className)
     );
     if (mySectionClasses.size === 0) {
@@ -5255,7 +5330,7 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
       })()}
 
       {modal && modal !== "attendance" && (
-        <Modal title={modalTitle} narrow={modal === "mark" && !editingId} wide={modal === "student"} onClose={() => { setModal(null); setEditingId(""); }}>
+        <Modal title={modalTitle} narrow={modal === "mark" && !editingId} wide={modal === "student"} onClose={() => { setModal(null); setEditingId(""); setForm(emptyForms.classFee); }}>
           <form className="modal-form" onSubmit={handleSubmit}>
             <datalist id="classes">{classNames.map((name) => <option key={name} value={name} />)}</datalist>
             <datalist id="subjects">{subjectOptionsForForm.map((subject) => <option key={subject} value={subject} />)}</datalist>
@@ -5485,14 +5560,51 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
 
             {modal === "salary" && (
               <div className="form-grid">
-                <Field label="Employee"><select className="control" value={form.employee} onChange={(e) => {
-                  const auto = getSalaryAutoValues(e.target.value, form.salaryMonth);
-                  setForm({ ...form, employee: e.target.value, amount: auto.amount, bonusAmount: auto.bonusAmount, paidAmount: auto.paidAmount });
-                }} required><option value="">Select employee</option>{data.employees.map((item) => <option key={item._id} value={item._id}>{item.name}</option>)}</select></Field>
+                {/* Employee picker — shows due amount inline */}
+                <Field label="Employee">
+                  <select className="control" value={form.employee} onChange={(e) => {
+                    const auto = getSalaryAutoValues(e.target.value, form.salaryMonth);
+                    setForm({ ...form, employee: e.target.value, amount: auto.amount, bonusAmount: auto.bonusAmount, paidAmount: auto.paidAmount });
+                  }} required>
+                    <option value="">Select employee</option>
+                    {data.employees.map((item) => {
+                      const due = Number(item.dueSalary || 0);
+                      return (
+                        <option key={item._id} value={item._id}>
+                          {item.name}{due > 0 ? ` — ৳${due.toLocaleString()} DUE` : " — Paid"}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </Field>
+
                 <Field label="Salary Month"><input className="control" type="month" value={form.salaryMonth} onChange={(e) => {
                   const auto = getSalaryAutoValues(form.employee, e.target.value);
                   setForm({ ...form, salaryMonth: e.target.value, amount: auto.amount, bonusAmount: auto.bonusAmount, paidAmount: auto.paidAmount });
                 }} /></Field>
+
+                {/* Due alert banner — shown when selected employee has unpaid dues */}
+                {selectedSalaryEmployee && Number(selectedSalaryEmployee.dueSalary || 0) > 0 && (
+                  <div className="full-span" style={{ background: "color-mix(in srgb,#dc2626 10%,transparent)", border: "1.5px solid color-mix(in srgb,#dc2626 35%,transparent)", borderRadius: "10px", padding: "12px 14px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#dc2626" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                        <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+                      </svg>
+                      <span style={{ fontSize: "13.5px", fontWeight: 600, color: "var(--app-danger,#dc2626)" }}>
+                        {selectedSalaryEmployee.name} has <strong>{money.format(selectedSalaryEmployee.dueSalary)}</strong> total due salary
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      className="btn danger"
+                      style={{ fontSize: "12px", padding: "5px 14px", borderRadius: "8px", flexShrink: 0 }}
+                      onClick={() => setForm((f) => ({ ...f, paidAmount: Number(f.amount || selectedSalaryEmployee.salaryAmount || 0) }))}
+                    >
+                      Pay in Full — {money.format(Number(form.amount || selectedSalaryEmployee.salaryAmount || 0))}
+                    </button>
+                  </div>
+                )}
+
                 <Field label="Base + Bonus Total"><input className="control" min="0" type="number" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} /></Field>
                 <Field label="Bonus Amount" hint={selectedSalaryEmployee ? `Base salary: ${money.format(selectedSalaryEmployee.salaryAmount || 0)}` : "Optional employee bonus for this month"}>
                   <input className="control" min="0" type="number" value={form.bonusAmount || 0} onChange={(e) => {
@@ -5501,9 +5613,45 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
                     setForm({ ...form, bonusAmount, amount: Number(baseAmount) + Number(bonusAmount || 0) });
                   }} />
                 </Field>
-                <Field label="Paid Amount"><input className="control" min="0" type="number" value={form.paidAmount} onChange={(e) => setForm({ ...form, paidAmount: e.target.value })} /></Field>
-                <div className="info-card compact-info"><strong>Due Payment:</strong> {money.format(salaryDuePreview)} <small>Bonus: {money.format(form.bonusAmount || 0)} - Previous due: {money.format(salaryAutoPreview?.dueAmount || 0)}</small></div>
-                <Field label="Note"><input className="control" value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} /></Field>
+
+                {/* Paid amount with quick-fill buttons */}
+                <Field label="Paid Amount">
+                  <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                    <input className="control" min="0" type="number" value={form.paidAmount} style={{ flex: 1 }}
+                      onChange={(e) => setForm({ ...form, paidAmount: e.target.value })} />
+                    {selectedSalaryEmployee && (
+                      <button type="button" className="btn soft" style={{ fontSize: "11px", padding: "6px 10px", borderRadius: "8px", whiteSpace: "nowrap", flexShrink: 0 }}
+                        onClick={() => setForm((f) => ({ ...f, paidAmount: Number(f.amount || selectedSalaryEmployee.salaryAmount || 0) }))}>
+                        Full
+                      </button>
+                    )}
+                  </div>
+                </Field>
+
+                {/* Due summary card — color changes based on due amount */}
+                <div className="full-span" style={{
+                  background: salaryDuePreview > 0 ? "color-mix(in srgb,#dc2626 8%,transparent)" : "color-mix(in srgb,#059669 8%,transparent)",
+                  border: `1.5px solid ${salaryDuePreview > 0 ? "color-mix(in srgb,#dc2626 30%,transparent)" : "color-mix(in srgb,#059669 30%,transparent)"}`,
+                  borderRadius: "10px", padding: "12px 14px",
+                  display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "8px",
+                }}>
+                  <div style={{ textAlign: "center" }}>
+                    <div style={{ fontSize: "11px", color: "var(--app-muted)", fontWeight: 600, marginBottom: "3px" }}>TOTAL</div>
+                    <div style={{ fontSize: "15px", fontWeight: 700 }}>{money.format(form.amount || 0)}</div>
+                  </div>
+                  <div style={{ textAlign: "center", borderLeft: "1px solid var(--app-border)", borderRight: "1px solid var(--app-border)" }}>
+                    <div style={{ fontSize: "11px", color: "var(--app-muted)", fontWeight: 600, marginBottom: "3px" }}>PAYING</div>
+                    <div style={{ fontSize: "15px", fontWeight: 700, color: "var(--app-success,#059669)" }}>{money.format(form.paidAmount || 0)}</div>
+                  </div>
+                  <div style={{ textAlign: "center" }}>
+                    <div style={{ fontSize: "11px", color: "var(--app-muted)", fontWeight: 600, marginBottom: "3px" }}>REMAINING DUE</div>
+                    <div style={{ fontSize: "15px", fontWeight: 700, color: salaryDuePreview > 0 ? "var(--app-danger,#dc2626)" : "var(--app-success,#059669)" }}>
+                      {salaryDuePreview > 0 ? money.format(salaryDuePreview) : "✓ Cleared"}
+                    </div>
+                  </div>
+                </div>
+
+                <Field label="Note"><input className="control" value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} placeholder="e.g. Monthly salary payment" /></Field>
               </div>
             )}
 
@@ -5956,7 +6104,7 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
             {modal === "monthlySalaries" && <Field label="Salary Month"><input className="control" type="month" value={form.month} onChange={(e) => setForm({ ...form, month: e.target.value })} /></Field>}
 
             <div className="modal-actions">
-              <button className="btn soft" type="button" onClick={() => { setModal(null); setEditingId(""); }}>Cancel</button>
+              <button className="btn soft" type="button" onClick={() => { setModal(null); setEditingId(""); setForm(emptyForms.classFee); }}>Cancel</button>
               <button className="btn primary" type="submit">
                 {(() => {
                   if (modal !== "mark" || editingId) return "Save";
@@ -5971,20 +6119,32 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
 
       {/* ── Pay All Salaries confirmation modal ─────────────────────────── */}
       {payAllModal && isAdmin && (() => {
-        const activeEmps = data.employees.filter((e) => e.status === "active" && Number(e.salaryAmount || 0) > 0);
-        const totalAmt   = activeEmps.reduce((s, e) => s + Number(e.salaryAmount || 0), 0);
-        const alreadyPaid = data.salaries.filter(
-          (s) => s.salaryMonth === payAllMonth && s.status === "paid"
-        ).length;
+        // Only employees who have unpaid/partial salary for the selected month
+        const unpaidEmps = data.employees.filter((e) => {
+          if (e.status !== "active" || Number(e.salaryAmount || 0) <= 0) return false;
+          const rec = data.salaries.find(
+            (s) => String(s.employee?._id || s.employee) === String(e._id) && s.salaryMonth === payAllMonth
+          );
+          return !rec || rec.status !== "paid";
+        });
+        const bonus    = Number(payAllBonus || 0);
+        const totalAmt = unpaidEmps.reduce((s, e) => s + Number(e.salaryAmount || 0) + bonus, 0);
 
         const handlePayAll = async () => {
           if (payAllLoading) return;
           setPayAllLoading(true);
           try {
-            const { data: res } = await erpApi.payAllSalaries(token, { month: payAllMonth, note: payAllNote || "Bulk salary payment" });
+            const { data: res } = await erpApi.payAllSalaries(token, {
+              month:       payAllMonth,
+              bonusAmount: bonus,
+              note:        payAllNote || "Bulk salary payment",
+            });
             showDoneAlert(`${res.paid} salary payments processed for ${payAllMonth}.`);
-            await refreshPartialData(token, ["salaries", "employees"]);
+            const partial = await refreshPartialData(token, ["salaries", "employees"]);
+            setData(prev => ({ ...prev, ...partial }));
             setPayAllModal(false);
+            setPayAllBonus(0);
+            setPayAllNote("");
           } catch (err) {
             setError(getErrorMessage(err));
           } finally {
@@ -5994,53 +6154,54 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
 
         return (
           <Modal title="Pay All Salaries" onClose={() => !payAllLoading && setPayAllModal(false)}>
-            {/* Summary banner */}
-            <div style={{ background: "color-mix(in srgb, var(--app-warning,#d97706) 12%, transparent)", border: "1px solid color-mix(in srgb, var(--app-warning,#d97706) 35%, transparent)", borderRadius: "10px", padding: "14px 16px", marginBottom: "18px", display: "flex", alignItems: "flex-start", gap: "10px" }}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#d97706" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: "1px" }}>
-                <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
-              </svg>
-              <div style={{ fontSize: "13.5px", lineHeight: "1.5" }}>
-                This will mark <strong>{activeEmps.length} active employee{activeEmps.length !== 1 ? "s" : ""}</strong> as fully paid for the selected month.<br />
-                Total disbursement: <strong style={{ color: "var(--app-success,#059669)" }}>{money.format(totalAmt)}</strong>
-                {alreadyPaid > 0 && <><br /><span style={{ color: "var(--app-warning,#d97706)" }}>⚠ {alreadyPaid} record{alreadyPaid !== 1 ? "s" : ""} already paid this month will be overwritten.</span></>}
-              </div>
-            </div>
-
-            {/* Employee preview list */}
-            <div style={{ maxHeight: "200px", overflowY: "auto", border: "1px solid var(--app-border)", borderRadius: "8px", marginBottom: "16px" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12.5px" }}>
-                <thead>
-                  <tr style={{ background: "var(--app-surface-2,#f8fafc)", position: "sticky", top: 0 }}>
-                    {["Employee", "Role", "Salary"].map((h) => (
-                      <th key={h} style={{ padding: "7px 10px", textAlign: "left", fontWeight: 600, color: "var(--app-muted)", borderBottom: "1px solid var(--app-border)" }}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {activeEmps.map((e) => (
-                    <tr key={e._id} style={{ borderBottom: "1px solid var(--app-border)" }}>
-                      <td style={{ padding: "7px 10px", fontWeight: 500 }}>{e.name}</td>
-                      <td style={{ padding: "7px 10px", textTransform: "capitalize", color: "var(--app-muted)" }}>{e.role}</td>
-                      <td style={{ padding: "7px 10px", fontWeight: 600, color: "var(--app-success,#059669)" }}>{money.format(e.salaryAmount)}</td>
-                    </tr>
-                  ))}
-                  {activeEmps.length === 0 && (
-                    <tr><td colSpan={3} style={{ padding: "14px 10px", textAlign: "center", color: "var(--app-muted)" }}>No active employees with salary set.</td></tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Month + note */}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: "12px", marginBottom: "18px" }}>
+            {/* Month selector first */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "12px", marginBottom: "16px" }}>
               <div>
                 <label style={{ display: "block", fontWeight: 600, fontSize: "12.5px", marginBottom: "5px", color: "var(--app-muted)" }}>Salary Month</label>
                 <input className="control" type="month" value={payAllMonth} onChange={(e) => setPayAllMonth(e.target.value)} style={{ width: "100%" }} />
               </div>
               <div>
-                <label style={{ display: "block", fontWeight: 600, fontSize: "12.5px", marginBottom: "5px", color: "var(--app-muted)" }}>Payment Note</label>
-                <input className="control" type="text" placeholder="e.g. Monthly salary disbursement" value={payAllNote} onChange={(e) => setPayAllNote(e.target.value)} style={{ width: "100%" }} />
+                <label style={{ display: "block", fontWeight: 600, fontSize: "12.5px", marginBottom: "5px", color: "var(--app-muted)" }}>Bonus per Employee</label>
+                <input className="control" type="number" min="0" placeholder="0" value={payAllBonus || ""} onChange={(e) => setPayAllBonus(e.target.value)} style={{ width: "100%" }} />
               </div>
+              <div>
+                <label style={{ display: "block", fontWeight: 600, fontSize: "12.5px", marginBottom: "5px", color: "var(--app-muted)" }}>Note</label>
+                <input className="control" type="text" placeholder="e.g. Monthly disbursement" value={payAllNote} onChange={(e) => setPayAllNote(e.target.value)} style={{ width: "100%" }} />
+              </div>
+            </div>
+
+            {/* Summary banner */}
+            <div style={{ background: "color-mix(in srgb, var(--app-warning,#d97706) 12%, transparent)", border: "1px solid color-mix(in srgb, var(--app-warning,#d97706) 35%, transparent)", borderRadius: "10px", padding: "12px 14px", marginBottom: "14px", fontSize: "13.5px", lineHeight: "1.6" }}>
+              <strong>{unpaidEmps.length}</strong> employee{unpaidEmps.length !== 1 ? "s" : ""} with unpaid salary for <strong>{payAllMonth}</strong>
+              {bonus > 0 && <> · Bonus: <strong style={{ color: "var(--app-primary,#2563eb)" }}>{money.format(bonus)} each</strong></>}
+              <br />Total disbursement: <strong style={{ color: "var(--app-success,#059669)", fontSize: "15px" }}>{money.format(totalAmt)}</strong>
+            </div>
+
+            {/* Unpaid employees list */}
+            <div style={{ maxHeight: "200px", overflowY: "auto", border: "1px solid var(--app-border)", borderRadius: "8px", marginBottom: "16px" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12.5px" }}>
+                <thead>
+                  <tr style={{ background: "var(--app-surface-2,#f8fafc)", position: "sticky", top: 0 }}>
+                    {["Employee", "Role", "Salary", bonus > 0 ? "Bonus" : null, "Total"].filter(Boolean).map((h) => (
+                      <th key={h} style={{ padding: "7px 10px", textAlign: "left", fontWeight: 600, color: "var(--app-muted)", borderBottom: "1px solid var(--app-border)" }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {unpaidEmps.map((e) => (
+                    <tr key={e._id} style={{ borderBottom: "1px solid var(--app-border)" }}>
+                      <td style={{ padding: "7px 10px", fontWeight: 500 }}>{e.name}</td>
+                      <td style={{ padding: "7px 10px", textTransform: "capitalize", color: "var(--app-muted)" }}>{e.role}</td>
+                      <td style={{ padding: "7px 10px" }}>{money.format(e.salaryAmount)}</td>
+                      {bonus > 0 && <td style={{ padding: "7px 10px", color: "var(--app-primary,#2563eb)", fontWeight: 600 }}>+{money.format(bonus)}</td>}
+                      <td style={{ padding: "7px 10px", fontWeight: 700, color: "var(--app-success,#059669)" }}>{money.format(Number(e.salaryAmount || 0) + bonus)}</td>
+                    </tr>
+                  ))}
+                  {unpaidEmps.length === 0 && (
+                    <tr><td colSpan={5} style={{ padding: "14px 10px", textAlign: "center", color: "var(--app-success,#059669)", fontWeight: 600 }}>✓ All employees are paid for {payAllMonth}</td></tr>
+                  )}
+                </tbody>
+              </table>
             </div>
 
             <div className="modal-actions">
@@ -6048,13 +6209,133 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
               <button
                 className="btn warn"
                 type="button"
-                disabled={payAllLoading || activeEmps.length === 0}
+                disabled={payAllLoading || unpaidEmps.length === 0}
                 onClick={handlePayAll}
-                style={{ minWidth: "180px" }}
+                style={{ minWidth: "200px" }}
               >
                 {payAllLoading
                   ? "Processing…"
-                  : `Pay ${activeEmps.length} Employee${activeEmps.length !== 1 ? "s" : ""} · ${money.format(totalAmt)}`}
+                  : `Pay ${unpaidEmps.length} Employee${unpaidEmps.length !== 1 ? "s" : ""} · ${money.format(totalAmt)}`}
+              </button>
+            </div>
+          </Modal>
+        );
+      })()}
+      {/* ── Pay Employee Due modal ───────────────────────────────────────── */}
+      {payEmpModal && (() => {
+        const emp         = payEmpModal;
+        const unpaidRows  = data.salaries.filter(
+          (s) => String(s.employee?._id || s.employee) === String(emp._id) && s.status !== "paid"
+        ).sort((a, b) => a.salaryMonth.localeCompare(b.salaryMonth));
+        const totalDue    = unpaidRows.reduce((s, r) => s + Number(r.dueAmount || 0), 0);
+        const bonus       = Number(payEmpBonus || 0);
+        const grandTotal  = totalDue + bonus;
+
+        const handlePayEmp = async () => {
+          if (payEmpLoading) return;
+          setPayEmpLoading(true);
+          try {
+            const { data: res } = await erpApi.payEmployeeDue(token, {
+              employeeId:  emp._id,
+              bonusAmount: bonus,
+              note:        payEmpNote || "Due salary cleared",
+            });
+            showDoneAlert(`${res.paid} payment${res.paid !== 1 ? "s" : ""} cleared for ${emp.name}. Total paid: ${money.format(res.totalPaid)}`);
+            const partial = await refreshPartialData(token, ["salaries", "employees"]);
+            setData(prev => ({ ...prev, ...partial }));
+            setPayEmpModal(null);
+            setPayEmpBonus(0);
+            setPayEmpNote("");
+          } catch (err) {
+            setError(getErrorMessage(err));
+          } finally {
+            setPayEmpLoading(false);
+          }
+        };
+
+        return (
+          <Modal title={`Pay Due Salary — ${emp.name}`} onClose={() => !payEmpLoading && setPayEmpModal(null)}>
+            {/* Employee info strip */}
+            <div style={{ display: "flex", alignItems: "center", gap: "12px", padding: "10px 14px", background: "var(--app-surface-2,#f8fafc)", borderRadius: "10px", marginBottom: "16px", border: "1px solid var(--app-border)" }}>
+              <div style={{ width: 38, height: 38, borderRadius: "50%", background: "linear-gradient(135deg,#2563eb,#7c3aed)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 800, fontSize: "15px", flexShrink: 0 }}>
+                {emp.name.slice(0, 1).toUpperCase()}
+              </div>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: "14px" }}>{emp.name}</div>
+                <div style={{ fontSize: "12px", color: "var(--app-muted)", textTransform: "capitalize" }}>{emp.role} · Base salary: {money.format(emp.salaryAmount || 0)}/mo</div>
+              </div>
+              <div style={{ marginLeft: "auto", textAlign: "right" }}>
+                <div style={{ fontSize: "11px", color: "var(--app-muted)", fontWeight: 600 }}>TOTAL DUE</div>
+                <div style={{ fontSize: "18px", fontWeight: 800, color: "var(--app-danger,#dc2626)" }}>{money.format(totalDue)}</div>
+              </div>
+            </div>
+
+            {/* Unpaid months breakdown */}
+            {unpaidRows.length > 0 ? (
+              <div style={{ border: "1px solid var(--app-border)", borderRadius: "8px", marginBottom: "16px", overflow: "hidden" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12.5px" }}>
+                  <thead>
+                    <tr style={{ background: "var(--app-surface-2,#f8fafc)" }}>
+                      {["Month", "Amount", "Paid", "Due", "Status"].map((h) => (
+                        <th key={h} style={{ padding: "7px 10px", textAlign: "left", fontWeight: 600, color: "var(--app-muted)", borderBottom: "1px solid var(--app-border)" }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {unpaidRows.map((r) => (
+                      <tr key={r._id} style={{ borderBottom: "1px solid var(--app-border)" }}>
+                        <td style={{ padding: "7px 10px", fontWeight: 600 }}>{r.salaryMonth}</td>
+                        <td style={{ padding: "7px 10px" }}>{money.format(r.amount || 0)}</td>
+                        <td style={{ padding: "7px 10px", color: "var(--app-success,#059669)" }}>{money.format(r.paidAmount || 0)}</td>
+                        <td style={{ padding: "7px 10px", fontWeight: 700, color: "var(--app-danger,#dc2626)" }}>{money.format(r.dueAmount || 0)}</td>
+                        <td style={{ padding: "7px 10px" }}><Status status={r.status} /></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div style={{ padding: "18px", textAlign: "center", color: "var(--app-success,#059669)", fontWeight: 600, marginBottom: "16px" }}>
+                ✓ No unpaid salary records found for this employee.
+              </div>
+            )}
+
+            {/* Bonus + note inputs */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: "12px", marginBottom: "16px" }}>
+              <div>
+                <label style={{ display: "block", fontWeight: 600, fontSize: "12.5px", marginBottom: "5px", color: "var(--app-muted)" }}>Bonus Amount</label>
+                <input className="control" type="number" min="0" placeholder="0" value={payEmpBonus || ""} onChange={(e) => setPayEmpBonus(e.target.value)} style={{ width: "100%" }} />
+              </div>
+              <div>
+                <label style={{ display: "block", fontWeight: 600, fontSize: "12.5px", marginBottom: "5px", color: "var(--app-muted)" }}>Note</label>
+                <input className="control" type="text" placeholder="e.g. Due salary cleared" value={payEmpNote} onChange={(e) => setPayEmpNote(e.target.value)} style={{ width: "100%" }} />
+              </div>
+            </div>
+
+            {/* Grand total bar */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "1px", background: "var(--app-border)", borderRadius: "10px", overflow: "hidden", marginBottom: "18px" }}>
+              {[
+                { label: "Unpaid Due", value: totalDue, color: "var(--app-danger,#dc2626)" },
+                { label: "Bonus", value: bonus, color: "var(--app-primary,#2563eb)" },
+                { label: "Total to Pay", value: grandTotal, color: "var(--app-success,#059669)" },
+              ].map(({ label, value, color }) => (
+                <div key={label} style={{ background: "var(--app-surface,#fff)", padding: "10px 14px", textAlign: "center" }}>
+                  <div style={{ fontSize: "11px", color: "var(--app-muted)", fontWeight: 600, marginBottom: "3px" }}>{label}</div>
+                  <div style={{ fontSize: "16px", fontWeight: 800, color }}>{money.format(value)}</div>
+                </div>
+              ))}
+            </div>
+
+            <div className="modal-actions">
+              <button className="btn soft" type="button" disabled={payEmpLoading} onClick={() => setPayEmpModal(null)}>Cancel</button>
+              <button
+                className="btn success"
+                type="button"
+                disabled={payEmpLoading || (unpaidRows.length === 0 && bonus === 0)}
+                onClick={handlePayEmp}
+                style={{ minWidth: "200px" }}
+              >
+                {payEmpLoading ? "Processing…" : `Pay ${money.format(grandTotal)}`}
               </button>
             </div>
           </Modal>

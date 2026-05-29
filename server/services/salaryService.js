@@ -140,21 +140,77 @@ async function recordSalaryPayment(payload) {
   return salary;
 }
 
-async function payAllSalaries({ month, note } = {}) {
-  const salaryMonth = month || new Date().toISOString().slice(0, 7);
-  const employees = await Employee.find({ status: "active" });
+// Clear ALL unpaid salary records for a single employee + optional bonus
+async function payEmployeeDue({ employeeId, bonusAmount, note } = {}) {
+  const employee = await Employee.findById(employeeId);
+  if (!employee) throw new Error("Employee not found.");
+
+  const bonus = normalizeMoney(bonusAmount);
+  const unpaid = await SalaryPayment.find({
+    employee: employeeId,
+    status: { $in: ["unpaid", "partial"] },
+  }).sort({ salaryMonth: 1 }); // oldest first
+
+  if (!unpaid.length) return { paid: 0, totalPaid: 0, records: [] };
+
   const results = [];
+  for (let i = 0; i < unpaid.length; i++) {
+    const record = unpaid[i];
+    const isLast = i === unpaid.length - 1;
+    // Bonus applied only to the most recent (last) month
+    const bonusForThis = isLast ? bonus : 0;
+    const baseAmount   = normalizeMoney(record.amount);
+    const totalAmount  = baseAmount + bonusForThis;
+
+    const updated = await SalaryPayment.findByIdAndUpdate(
+      record._id,
+      {
+        amount:      totalAmount,
+        bonusAmount: bonusForThis,
+        paidAmount:  totalAmount,
+        dueAmount:   0,
+        status:      "paid",
+        paymentDate: new Date(),
+        note:        String(note || "Due salary cleared").trim(),
+      },
+      { new: true },
+    ).populate("employee");
+    results.push(updated);
+  }
+
+  await refreshEmployeeDue(employeeId);
+  return {
+    paid:      results.length,
+    totalPaid: results.reduce((s, r) => s + Number(r.paidAmount || 0), 0),
+    records:   results,
+  };
+}
+
+// Pay all active employees for a given month — creates record if missing
+async function payAllSalaries({ month, bonusAmount, note } = {}) {
+  const salaryMonth = month || new Date().toISOString().slice(0, 7);
+  const bonus       = normalizeMoney(bonusAmount);
+
+  // Find employees who still have unpaid/partial salary for this month
+  // (also includes employees who have no record yet for the month)
+  const employees = await Employee.find({ status: "active" });
+  const results   = [];
 
   for (const employee of employees) {
     const baseAmount = normalizeMoney(employee.salaryAmount);
     if (baseAmount <= 0) continue;
 
+    // Only process if the record is unpaid/partial (or doesn't exist yet)
+    const existing = await SalaryPayment.findOne({ employee: employee._id, salaryMonth });
+    if (existing && existing.status === "paid") continue;
+
+    const totalAmount = baseAmount + bonus;
     const payment = await SalaryPayment.findOneAndUpdate(
       { employee: employee._id, salaryMonth },
       {
-        amount:      baseAmount,
-        bonusAmount: 0,
-        paidAmount:  baseAmount,
+        amount:      totalAmount,
+        bonusAmount: bonus,
+        paidAmount:  totalAmount,
         dueAmount:   0,
         status:      "paid",
         paymentDate: new Date(),
@@ -166,7 +222,6 @@ async function payAllSalaries({ month, note } = {}) {
     results.push(payment);
   }
 
-  // Refresh due-salary totals for all affected employees
   await Promise.all(employees.map((e) => refreshEmployeeDue(e._id)));
   return results;
 }
@@ -175,6 +230,7 @@ module.exports = {
   createEmployee,
   generateMonthlySalaries,
   payAllSalaries,
+  payEmployeeDue,
   recordSalaryPayment,
   refreshEmployeeDue,
   updateEmployee,

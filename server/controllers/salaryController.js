@@ -1,5 +1,5 @@
 const SalaryPayment = require("../models/SalaryPayment");
-const { generateMonthlySalaries, payAllSalaries, recordSalaryPayment } = require("../services/salaryService");
+const { generateMonthlySalaries, payAllSalaries, payEmployeeDue, recordSalaryPayment } = require("../services/salaryService");
 const { canReadAllEmployees, findEmployeeForUser, isFinance } = require("../utils/access");
 
 async function getSalaries(req, res, next) {
@@ -55,8 +55,28 @@ async function payAll(req, res, next) {
     if (req.user.role !== "admin") {
       return res.status(403).json({ message: "Only admins can run bulk salary payments." });
     }
-    const results = await payAllSalaries({ month: req.body.month, note: req.body.note });
+    const results = await payAllSalaries({
+      month:       req.body.month,
+      bonusAmount: req.body.bonusAmount,
+      note:        req.body.note,
+    });
     return res.status(200).json({ paid: results.length, salaries: results });
+  } catch (error) {
+    return next(error);
+  }
+}
+
+async function payEmployeeDueHandler(req, res, next) {
+  try {
+    if (!isFinance(req.user)) {
+      return res.status(403).json({ message: "Only admin or accounts users can pay salaries." });
+    }
+    const result = await payEmployeeDue({
+      employeeId:  req.body.employeeId,
+      bonusAmount: req.body.bonusAmount,
+      note:        req.body.note,
+    });
+    return res.status(200).json(result);
   } catch (error) {
     return next(error);
   }
@@ -67,4 +87,5 @@ module.exports = {
   getSalaries,
   payAll,
   paySalary,
+  payEmployeeDueHandler,
 };

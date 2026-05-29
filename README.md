@@ -2,7 +2,7 @@
 
 A full-stack school management system covering students, staff, fees, marks, attendance, leave management, classrooms, and expenses. Runs as a **web app** (Render.com / any Node host) or a **one-click Windows desktop app** (Electron + embedded MongoDB — no server or internet required).
 
-**Version:** 1.4.0 &nbsp;·&nbsp; **Stack:** React 18 · Express · MongoDB · Electron
+**Version:** 1.4.1 &nbsp;·&nbsp; **Stack:** React 18 · Express · MongoDB · Electron
 
 ---
 
@@ -62,7 +62,17 @@ A full-stack school management system covering students, staff, fees, marks, att
 ### Salaries & Increments
 - Record monthly salary payments with paid amount and due tracking
 - Generate monthly salary ledgers for all employees in one click
-- **Pay All Salaries** — admin-only one-click bulk payment: select a month, preview all active employees and the total amount, confirm to mark everyone as fully paid simultaneously
+- **Pay (per employee)** — each employee with outstanding dues shows a **Pay** button that opens a dedicated modal:
+  - Lists every unpaid month with amount / paid / due / status breakdown
+  - **Bonus amount** field — added to the most recent unpaid month
+  - Single confirm clears all unpaid months at once via `POST /api/salaries/pay-employee-due`
+- **Pay All Salaries** — admin-only bulk payment for a selected month:
+  - Only shows employees who are **unpaid or partial** for that month (skips already-paid)
+  - Optional **bonus per employee** applied to everyone in the batch
+  - Live preview table with salary + bonus + total per employee
+  - Shows "✓ All employees are paid" if nothing is due
+- **Dues alert strip** — salary section header shows total outstanding across all employees
+- Salary ledger Due column: red badge with amount if unpaid, green "✓ Clear" if fully paid
 - Salary increment records with previous salary, increment amount, effective date, and reason
 
 ### Leave & Absence Management
@@ -362,7 +372,8 @@ All routes return JSON. Protected routes require `Authorization: Bearer <token>`
 | POST | `/api/payments/generate-monthly` | Bearer | Bulk-generate monthly fees |
 | POST | `/api/payments/generate-exam` | Bearer | Bulk-generate exam fees |
 | GET/POST | `/api/salaries` | Bearer | Employee salary payments |
-| POST | `/api/salaries/pay-all` | Bearer (admin) | Bulk pay all active employees for a month |
+| POST | `/api/salaries/pay-all` | Bearer (admin) | Bulk pay all unpaid employees for a month (+ optional bonus) |
+| POST | `/api/salaries/pay-employee-due` | Bearer (finance) | Clear all unpaid records for one employee (+ optional bonus) |
 | POST | `/api/salaries/generate-monthly` | Bearer | Bulk-generate monthly salary ledger |
 | GET/PUT/DELETE | `/api/salary-increments` | Bearer | Salary increment records |
 | GET/POST | `/api/marks` | Bearer | Exam marks entry |
@@ -618,9 +629,22 @@ All high-traffic queries are backed by Mongoose indexes:
 
 ## Changelog
 
+### v1.4.1 — Bug fixes
+- **Critical:** `payEmployeeDue` was missing from `salaryService` module exports — caused a hard server crash on every Pay request; fixed
+- **High:** UI did not update after Pay All / Pay Employee — `refreshPartialData` result was discarded instead of being merged into state; fixed
+- **High:** Teacher filters (classwise results, mark entry section list) used `user.id` which is `undefined` — teachers saw no data; fixed to `user._id`
+- **Medium:** "Pay in Full" button used base salary instead of total amount (ignoring bonus already entered); fixed to use `form.amount`
+- **Medium:** All leave success notifications (submit, review, delete) used `setSuccess` instead of `showDoneAlert` so they never auto-cleared; fixed
+- **Medium:** Receipt popup window was left open as a blank tab when blocked by the browser; now closed immediately on block
+- **Low:** Modal `form` state was not reset on Cancel — stale data from a previous form could bleed into the next modal opened; fixed
+- **Low:** `payAllNote` and `payEmpNote` were not cleared after a successful payment; fixed
+- **Low:** Biometric attendance `useCallback` listed `refresh` in deps but called `refreshPartialData`; fixed to correct deps
+
 ### v1.4.0
 - **Leave & Absence Management** — teachers/staff submit applications with date range, reason, and substitute teacher assignments per class period; admin review panel with approve/reject/note
-- **Pay All Salaries** — admin-only one-click bulk salary payment with employee preview, total amount, month selector, and note field
+- **Pay per employee** — dedicated modal shows all unpaid months, optional bonus amount, single confirm clears everything via new `pay-employee-due` endpoint
+- **Pay All Salaries** — admin bulk payment; only processes unpaid/partial records for selected month; optional bonus per employee; live totals preview
+- **Salary due visibility** — red badge on due amounts, green "✓ Clear" when paid, dues alert strip showing total outstanding, Pay button appears only when there are dues
 - **Full class routines** — Nursery through Class 12 (including Science/Arts/Commerce streams), 792 entries seeded automatically
 - **Routine timetable view** — visual day × period grid with subject colour-coding, teacher, room, class picker dropdown
 - **Student section in leave substitutes** — each substitute assignment can specify which section the substitute covers

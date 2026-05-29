@@ -241,7 +241,8 @@ export const erpApi = {
   createPayment: (token, payload) => api.post("/api/payments", payload, authConfig(token)),
   updatePayment: (token, id, payload) => api.put(`/api/payments/${id}`, payload, authConfig(token)),
   createSalary:    (token, payload)         => api.post("/api/salaries",          payload, authConfig(token)),
-  payAllSalaries:  (token, payload)         => api.post("/api/salaries/pay-all",   payload, authConfig(token)),
+  payAllSalaries:     (token, payload) => api.post("/api/salaries/pay-all",          payload, authConfig(token)),
+  payEmployeeDue:     (token, payload) => api.post("/api/salaries/pay-employee-due", payload, authConfig(token)),
 
   createStudent: (token, payload) => api.post("/api/students", payload, authConfig(token)),
   updateStudent: (token, id, payload) => api.put(`/api/students/${id}`, payload, authConfig(token)),
