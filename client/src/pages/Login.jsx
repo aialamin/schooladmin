@@ -5,10 +5,11 @@ import { api, getErrorMessage } from "../api";
 const DEMO_PASSWORD = "test1234";
 
 const DEMO_ACCOUNTS = [
-  { label: "Admin Demo",    email: "admin@school.test",      password: DEMO_PASSWORD, role: "Full access"    },
-  { label: "Class Teacher", email: "teacher@school.test",    password: DEMO_PASSWORD, role: "Assigned class" },
-  { label: "Accountant",    email: "accountant@school.test", password: DEMO_PASSWORD, role: "Finance"        },
-  { label: "Student Demo",  email: "student@school.test",    password: DEMO_PASSWORD, role: "Student portal" },
+  { label: "Admin Demo",    email: "admin@school.test",      password: DEMO_PASSWORD, role: "Full access"       },
+  { label: "Class Teacher", email: "teacher@school.test",    password: DEMO_PASSWORD, role: "Assigned class"    },
+  { label: "Accountant",    email: "accountant@school.test", password: DEMO_PASSWORD, role: "Finance"           },
+  { label: "Cashier Demo",  email: "cashier@school.test",    password: DEMO_PASSWORD, role: "Payment terminal"  },
+  { label: "Student Demo",  email: "student@school.test",    password: DEMO_PASSWORD, role: "Student portal"    },
 ];
 
 /* Three headline value propositions shown below the hero */
@@ -32,47 +33,52 @@ const pillars = [
     bg: "#f5f3ff",
     color: "#7c3aed",
     title: "Every role, perfectly scoped",
-    text: "7 dedicated portals — admin controls everything, teachers see only their class, students see only their records, finance staff see only payments.",
+    text: "8 dedicated portals — admin, teacher, accountant, accounts, cashier, staff, student, and audit. Each user sees only what their role needs — nothing more.",
   },
 ];
 
 const featureGroups = [
-  { icon: "student",   title: "Student Management",     text: "Enrol students with class, section, roll number, guardian, and contact. Full payment history, marks summary, attendance records, and status on one profile page." },
-  { icon: "sections",  title: "Class Sections",         text: "Unlimited sections per class, each with its own assigned teacher. Scoped per academic year and used as the filter basis for marks, results, and routines." },
-  { icon: "classroom", title: "Classrooms",             text: "Track every room: number, floor, bench count, and capacity. Live student count with multi-shift teacher assignments — Morning, Day, Evening, or any custom shift." },
-  { icon: "payment",   title: "Fees & Payments",        text: "Fee structures per class: admission, session, monthly, and exam. Bulk-generate for a whole class, track per-student dues, and print payment receipts." },
-  { icon: "teacher",   title: "Class Teacher Portal",   text: "Teachers access only their assigned class — students, marks entry, routines, and result cards are fully scoped. No cross-section data visible." },
-  { icon: "staff",     title: "Employee Management",    text: "Staff profiles with role, salary type, joining date, and status. People overview shows teacher count, monthly salary bill, and role breakdown cards." },
-  { icon: "salary",    title: "Salaries & Increments",  text: "Record monthly salary payments and bulk-generate for all employees in one click. Increment records track previous salary, new amount, date, and reason." },
-  { icon: "result",    title: "Marks & Result Cards",   text: "Enter marks by subject and exam type. Weighted scores, class positions, and PDF-ready result cards with filter by class, teacher, student, and exam." },
-  { icon: "biometric", title: "Attendance",             text: "Daily employee attendance: present, late, absent, leave, half-day. Manual, bulk, biometric scan (WebAuthn / ZKTeco), and monthly grid view." },
-  { icon: "expense",   title: "Expenses",               text: "Log school costs with title, category, amount, paid-to, and payment method. Nine categories, monthly + category filter, and totals breakdown." },
-  { icon: "routine",   title: "Class Routines",         text: "Timetable entries per class: day, subject, teacher, room, start and end time. Overlap detection prevents double-booking the same teacher or room." },
-  { icon: "settings",  title: "School Settings",        text: "Configure school name, logos, academic year, exam title, pass mark, principal name, admission notice, support email, and result remarks." },
-  { icon: "database",  title: "Database Configuration", text: "Each school connects their own MongoDB URI from Settings. Test, save, and the server reconnects live with accounts auto-seeded into any fresh database." },
+  { icon: "student",   title: "Student Management",          text: "Enrol students with class, section, roll number, guardian, and contact. Full payment history, marks summary, attendance records, and status on one profile page." },
+  { icon: "sections",  title: "Class Sections",              text: "Unlimited sections per class, each with its own assigned teacher. Scoped per academic year and used as the filter basis for marks, results, and routines." },
+  { icon: "classroom", title: "Classrooms",                  text: "Track every room: number, floor, bench count, and capacity. Live student count with multi-shift teacher assignments — Morning, Day, Evening, or any custom shift." },
+  { icon: "payment",   title: "Fees & Payments",             text: "Fee structures per class: admission, session, monthly, and exam. Bulk-generate for a whole class, track per-student dues, and print payment receipts." },
+  { icon: "roles",     title: "Cashier / Receptionist",      text: "Dedicated payment-station UI for front-desk staff. Search students by name or roll, auto-fill class fees, collect payment, and print a unique REC-YYYYMM receipt instantly." },
+  { icon: "teacher",   title: "Class Teacher Portal",        text: "Teachers access only their assigned class — students, marks entry, routines, and result cards are fully scoped. No cross-section data visible." },
+  { icon: "staff",     title: "Employee Management",         text: "Staff profiles with role, salary type, joining date, and status. People overview shows teacher count, monthly salary bill, and role breakdown cards." },
+  { icon: "salary",    title: "Salaries & Increments",       text: "Record monthly salary payments and bulk-generate for all employees in one click. Pay a single employee's full dues with one click including an optional bonus." },
+  { icon: "result",    title: "Marks & Result Cards",        text: "Enter marks by subject and exam type. Weighted scores, class positions, and PDF-ready result cards with filter by class, teacher, student, and exam." },
+  { icon: "biometric", title: "Attendance",                  text: "Daily employee attendance: present, late, absent, leave, half-day. Manual, bulk, biometric scan (WebAuthn / ZKTeco), and monthly grid view." },
+  { icon: "expense",   title: "Expenses",                    text: "Log school costs with title, category, amount, paid-to, and payment method. Nine categories, monthly + category filter, and totals breakdown." },
+  { icon: "workflow",  title: "Leave & Absence Management",  text: "Teachers and staff submit leave applications with date range, substitute teacher assignments per class period, and reason. Admins approve or reject with a review note." },
+  { icon: "routine",   title: "Class Routines",              text: "Timetable entries per class: day, subject, teacher, room, start and end time. Overlap detection prevents double-booking the same teacher or room. 792 entries seeded." },
+  { icon: "settings",  title: "School Settings",             text: "Configure school name, logos, academic year, exam title, pass mark, principal name, admission notice, support email, and result remarks." },
+  { icon: "database",  title: "Database Configuration",      text: "Each school connects their own MongoDB URI from Settings. Test, save, and the server reconnects live with accounts auto-seeded into any fresh database." },
 ];
 
 const rolesList = [
-  { role: "Admin",      code: "admin",      text: "Full access to all modules, database configuration, and user account management." },
-  { role: "Accountant", code: "accountant", text: "Fees, payments, expenses, and salaries — read and write access." },
-  { role: "Accounts",   code: "accounts",   text: "Finance read-only — view all fee and payment records without making changes." },
-  { role: "Teacher",    code: "teacher",    text: "Marks entry, routines, and attendance — scoped to the assigned class and section." },
-  { role: "Staff",      code: "staff",      text: "Attendance view and own employee profile only." },
-  { role: "Student",    code: "student",    text: "Own profile, payment history, marks, and result cards." },
-  { role: "Audit",      code: "audit",      text: "Read-only access to all records across every module." },
+  { role: "Admin",      code: "admin",      text: "Full access to all modules — students, fees, salaries, employees, leave requests, database config, and user account management." },
+  { role: "Accountant", code: "accountant", text: "Fees, payments, expenses, and salaries — full read and write access to all finance modules." },
+  { role: "Accounts",   code: "accounts",   text: "Finance read-only — view all fee, payment, salary, and report records without making changes." },
+  { role: "Teacher",    code: "teacher",    text: "Marks entry, routines, and attendance scoped to the assigned class and section. Can submit leave applications with substitute assignments." },
+  { role: "Staff",      code: "staff",      text: "Attendance view, own employee profile, and can submit leave applications." },
+  { role: "Student",    code: "student",    text: "Own profile, full payment history, marks by subject, and printable result cards." },
+  { role: "Audit",      code: "audit",      text: "Read-only access to all records across every module — students, fees, salaries, marks, attendance, and expenses." },
+  { role: "Cashier",    code: "cashier",    text: "Simplified payment-station portal — collect guardian payments, print receipts, view class fees and student results. No access to salary, expenses, or settings." },
 ];
 
 const workflowSteps = [
   "Create classes, sections, and fee rules",
   "Add employees and assign class teachers",
   "Enrol students with guardian details",
-  "Collect fees, enter marks, and track attendance",
-  "Print receipts, result cards, and salary slips",
+  "Cashier collects fees and prints receipts at front desk",
+  "Teachers enter marks and submit leave applications",
+  "Admins approve leaves, process salaries, and track expenses",
+  "Print result cards, salary slips, and monthly reports",
 ];
 
 const metrics = [
-  { value: "7",    label: "Role portals" },
-  { value: "13+",  label: "Feature modules" },
+  { value: "8",    label: "Role portals" },
+  { value: "15+",  label: "Feature modules" },
   { value: "100%", label: "Offline ready" },
 ];
 
@@ -201,9 +207,9 @@ export default function Login({ onLogin }) {
       {/* ── Hero ──────────────────────────────────────────────── */}
       <section className="pro-hero login-first-hero overflow-hidden" id="home">
         <div className="pro-hero-copy">
-          <p className="pro-eyebrow">v1.3.0 &nbsp;·&nbsp; Production Ready</p>
+          <p className="pro-eyebrow">v1.5.0 &nbsp;·&nbsp; Production Ready</p>
           <h1>Run Your School From <em className="hero-highlight">One Dashboard</em></h1>
-          <p>Every workflow your campus needs — students, fees, marks, staff, attendance, and expenses. Seven role-specific portals keep each user focused. Deploy to the cloud or run offline on Windows.</p>
+          <p>Every workflow your campus needs — students, fees, marks, staff, attendance, leave management, and expenses. Eight role-specific portals keep each user focused. Deploy to the cloud or run offline on Windows.</p>
           <div className="pro-hero-actions flex flex-wrap gap-3">
             <a className="pro-primary-link transition hover:-translate-y-0.5" href="#login">Try the Demo</a>
             <a className="pro-secondary-link border-white/25 bg-white/95 transition hover:-translate-y-0.5" href="#features">See All Features</a>
@@ -282,7 +288,7 @@ export default function Login({ onLogin }) {
         <div className="pro-section-head section-head-center">
           <p>Built-in Modules</p>
           <h2>All the tools. None of the complexity.</h2>
-          <span>13 modules covering every academic, finance, and operations workflow — no plugins, no extra subscriptions, no third-party integrations.</span>
+          <span>15 modules covering every academic, finance, HR, and operations workflow — no plugins, no extra subscriptions, no third-party integrations.</span>
         </div>
         <div className="pro-feature-grid">
           {featureGroups.map((feature) => (
@@ -299,7 +305,7 @@ export default function Login({ onLogin }) {
       <section className="pro-section bg-white" id="roles">
         <div className="pro-section-head section-head-center">
           <p>Access Control</p>
-          <h2>One platform. Seven dedicated portals.</h2>
+          <h2>One platform. Eight dedicated portals.</h2>
           <span>Each role has its own precisely scoped view — everyone sees exactly what they need, nothing more.</span>
         </div>
         <div className="roles-table">
@@ -339,7 +345,7 @@ export default function Login({ onLogin }) {
       <footer className="pro-home-footer footer-with-owner bg-slate-950" id="contact">
         <div>
           <strong>School Manager</strong>
-          <span>Professional school management — v1.3.0 · React 18 · Node.js · MongoDB · Electron.</span>
+          <span>Professional school management — v1.5.0 · React 18 · Node.js · MongoDB · Electron.</span>
         </div>
         <div className="footer-owner">
           <img alt="Md. Al Amin Hossain" decoding="async" loading="lazy" src="/owner-alamin-small.jpg" />

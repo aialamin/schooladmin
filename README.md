@@ -2,7 +2,7 @@
 
 A full-stack school management system covering students, staff, fees, marks, attendance, leave management, classrooms, and expenses. Runs as a **web app** (Render.com / any Node host) or a **one-click Windows desktop app** (Electron + embedded MongoDB — no server or internet required).
 
-**Version:** 1.4.1 &nbsp;·&nbsp; **Stack:** React 18 · Express · MongoDB · Electron
+**Version:** 1.5.0 &nbsp;·&nbsp; **Stack:** React 18 · Express · MongoDB · Electron
 
 ---
 
@@ -44,6 +44,17 @@ A full-stack school management system covering students, staff, fees, marks, att
 - Live student count per room (auto-computed from section assignments)
 - **Multi-shift teacher assignment** — each room can have different teachers per shift (Morning, Day, Evening, or any custom shift name)
 - Each shift maps to a specific class, section, and class teacher
+
+### Cashier / Receptionist Portal
+- Dedicated cashier dashboard designed for non-technical front-desk staff
+- **Quick student finder** — search by name, roll number, or student ID with live dropdown results
+- **One-click payment form** — select a student, fee type auto-fills from the class fee structure, enter amount received and submit
+- **Auto-generated bill number** — every payment gets a unique `REC-YYYYMM-XXXXXX` receipt number
+- **Printable A5 receipt** — PDF receipt prints automatically after every payment; re-print button persists for the last receipt
+- Today's collection stats strip: total collected, payments made, students with dues, total outstanding
+- Today's collection table showing all payments taken during the session
+- Access scoped to: student payment records, class fees, results, and class teacher info
+- No access to Settings, expenses, salaries, or employee records
 
 ### Fees & Payments
 - Define fee structures per class: admission, session, monthly, and exam fees
@@ -130,13 +141,16 @@ A full-stack school management system covering students, staff, fees, marks, att
 
 ### User Management
 - Create, view, and manage user accounts with role assignment
-- Roles: admin, teacher, accountant, accounts, staff, student, audit
+- Roles: admin, teacher, accountant, accounts, staff, student, audit, cashier
+- **Permissions matrix** — visual role-by-module grid showing each role's access level (full / view / write / own / none)
+- Inline role change for any user account from the management table
 
 ### Dashboard
 - Key metrics: total students, total employees, total income collected, total dues
 - Monthly collection bar chart
 - Recent payments feed
-- Role-filtered — teachers see only their relevant data, finance staff see fee data, etc.
+- **Cashier dashboard** — simplified payment station view with today's collection stats and quick payment form
+- Role-filtered — teachers see only their class data, finance staff see fee data, cashiers see the payment terminal, students see their own records
 
 ---
 
@@ -149,8 +163,9 @@ A full-stack school management system covering students, staff, fees, marks, att
 | `accounts` | Finance read-only |
 | `teacher` | Marks entry, routines, attendance, submit leave applications — scoped to assigned class/section |
 | `staff` | Attendance view, submit leave applications, own profile |
-| `student` | Own profile, own payment history |
+| `student` | Own profile, own payment history, marks, and result cards |
 | `audit` | Read-only access to all records |
+| `cashier` | Student payment collection, class fees view, results, class teacher info — simplified payment terminal UI |
 
 ---
 
@@ -298,13 +313,14 @@ npm start        # serves both frontend + API from Express on PORT
 
 | Email | Password | Role |
 |---|---|---|
-| admin@school.test | admin | admin |
-| teacher@school.test | teacher | teacher |
-| accountant@school.test | accountant | accountant |
-| accounts@school.test | accounts | accounts |
-| staff@school.test | staff | staff |
-| student@school.test | student | student |
-| audit@school.test | audit | audit |
+| admin@school.test | test1234 | admin |
+| teacher@school.test | test1234 | teacher |
+| accountant@school.test | test1234 | accountant |
+| accounts@school.test | test1234 | accounts |
+| staff@school.test | test1234 | staff |
+| student@school.test | test1234 | student |
+| audit@school.test | test1234 | audit |
+| cashier@school.test | test1234 | cashier |
 
 > These are only created when `ENABLE_DEMO_ACCOUNTS=true`.
 
@@ -429,9 +445,10 @@ When a fresh empty database is connected, these accounts are auto-created:
 
 | Email | Password | Role |
 |---|---|---|
-| admin@school.test | admin | admin |
-| teacher@school.test | teacher | teacher |
-| student@school.test | student | student |
+| admin@school.test | test1234 | admin |
+| teacher@school.test | test1234 | teacher |
+| student@school.test | test1234 | student |
+| cashier@school.test | test1234 | cashier |
 
 Change passwords immediately after first login.
 
@@ -628,6 +645,15 @@ All high-traffic queries are backed by Mongoose indexes:
 ---
 
 ## Changelog
+
+### v1.5.0 — Cashier role · SVG icon system · Role-aware mobile nav
+
+- **Cashier / Receptionist role** — new `cashier` role with a dedicated payment-station dashboard; quick student search, one-click payment form, auto-generated `REC-YYYYMM-XXXXXX` bill number, auto-print A5 PDF receipt, today's collection stats strip
+- **8th user role** — `cashier` added to ALLOWED_ROLES, demo account (`cashier@school.test / test1234`) auto-seeded, role permissions matrix updated
+- **SVG icon system** — all emoji characters removed from the UI and replaced with inline SVG icons (DashboardIcon component); affects result cards (rank medals), payment status indicators, student gender labels, info chips, search/browse tabs, and the role permissions matrix
+- **Role-aware mobile bottom nav** — mobile bottom navigation now shows the 4 most relevant shortcuts per role (e.g. teacher gets Marks + Leave Apply, cashier gets Students + Fees, admin gets Students + Employees)
+- **Sticky login page header** — the homepage header stays fixed at the top on both mobile and desktop at all viewport sizes
+- **Permissions matrix** — role management panel now shows a full colour-coded access-level grid; inline role change available for all users
 
 ### v1.4.1 — Bug fixes
 - **Critical:** `payEmployeeDue` was missing from `salaryService` module exports — caused a hard server crash on every Pay request; fixed

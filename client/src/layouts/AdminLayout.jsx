@@ -368,7 +368,7 @@ export default function AdminLayout({ activeView, children, onLogout, onOpenUser
               <span className="nav-icon"><Icon name={theme === "dark" ? "sun" : "moon"} /></span>
               <span className="nav-text">{theme === "dark" ? "Light Mode" : "Dark Mode"}</span>
             </button>
-            <button aria-label="Help" data-label="Help" className="nav-button" type="button" title="Help" onClick={() => { setIsMobileMenuOpen(false); handleViewChange("dashboard"); }}>
+            <button aria-label="Help" data-label="Help" className="nav-button" type="button" title="Help" onClick={() => { setIsMobileMenuOpen(false); handleViewChange(canOpenSettings(user) ? "settings" : "dashboard"); }}>
               <span className="nav-icon"><Icon name="help" /></span>
               <span className="nav-text">Help</span>
             </button>
@@ -396,22 +396,30 @@ export default function AdminLayout({ activeView, children, onLogout, onOpenUser
 
       {/* ── Mobile bottom navigation bar ── */}
       {isMobile && (() => {
-        const bottomNavItems = [
-          { key: "dashboard",      icon: "dashboard",  label: "Home"     },
-          { key: "students",       icon: "student",    label: "Students" },
-          { key: "marks",          icon: "marks",      label: "Marks"    },
-          { key: "fees",           icon: "card",       label: "Fees"     },
-        ];
-        // Filter to items this role can actually see
-        const allowed = bottomNavItems.filter((item) => {
-          const def = navItems.find((n) => n.key === item.key);
-          if (!def) return true;
-          if (!def.allowedRoles) return true;
-          return def.allowedRoles.includes(user?.role);
-        });
+        // Role-aware shortcuts: show the 4 most relevant items per role.
+        // These mirror the desktop sidebar — same keys, same allowedRoles checks.
+        const ROLE_BOTTOM_NAV = {
+          admin:      ["dashboard", "students",    "employees",    "fees"       ],
+          accountant: ["dashboard", "fees",        "salaries",     "expenses"   ],
+          accounts:   ["dashboard", "fees",        "reports",      "students"   ],
+          teacher:    ["dashboard", "marks",       "students",     "leaveApply" ],
+          staff:      ["dashboard", "attendance",  "leaveApply",   "employees"  ],
+          cashier:    ["dashboard", "students",    "fees",         "resultCards"],
+          audit:      ["dashboard", "students",    "fees",         "reports"    ],
+          student:    ["dashboard", "marks",       "fees",         "teachers"   ],
+          employee:   ["dashboard", "attendance",  "fees",         "marks"      ],
+        };
+        const roleKeys = ROLE_BOTTOM_NAV[user?.role] || ["dashboard", "students", "marks", "fees"];
+        // Map each key to its navItems definition so we can pull the correct icon/label
+        const bottomNavItems = roleKeys
+          .map((key) => navItems.find((n) => n.key === key))
+          .filter(Boolean)
+          // Keep only items the role is actually allowed to see
+          .filter((item) => !item.allowedRoles || item.allowedRoles.includes(user?.role));
+
         return (
           <nav className="mobile-bottom-nav" aria-label="Quick navigation">
-            {allowed.map((item) => (
+            {bottomNavItems.map((item) => (
               <button
                 key={item.key}
                 type="button"

@@ -9,6 +9,7 @@ const DEMO_ACCOUNTS = [
   { name: "Demo Employee", email: "employee@school.test", password: DEMO_PASSWORD, role: "employee" },
   { name: "Demo Student", email: "student@school.test", password: DEMO_PASSWORD, role: "student" },
   { name: "Demo Audit", email: "audit@school.test", password: DEMO_PASSWORD, role: "audit" },
+  { name: "Demo Cashier", email: "cashier@school.test", password: DEMO_PASSWORD, role: "cashier" },
 ];
 
 module.exports = {
