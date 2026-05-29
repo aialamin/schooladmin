@@ -59,6 +59,7 @@ const defaultSchoolSettings = {
   admissionNotice: "Admission open. Contact school office for details.",
   principalName: "Principal",
   resultRemarksDefault: "She/He has been consistently progressing.",
+  classSubjectsConfig: {},
 };
 
 const emptyERPData = {

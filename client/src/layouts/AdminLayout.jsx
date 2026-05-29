@@ -17,7 +17,7 @@ function useIsMobile(breakpoint = 960) {
 // If omitted, item is visible to everyone.
 const FINANCE_ROLES = ["admin", "accounts", "accountant"];
 const OFFICE_ROLES  = ["admin", "accounts", "accountant", "staff"];
-const NON_STUDENT   = ["admin", "accounts", "accountant", "staff", "teacher", "audit"];
+const NON_STUDENT   = ["admin", "accounts", "accountant", "staff", "teacher", "audit", "cashier"];
 
 const navSections = [
   {
@@ -32,7 +32,7 @@ const navSections = [
       { key: "sections", label: "Sections", icon: "sections", allowedRoles: ["admin"] },
       { key: "classrooms", label: "Classrooms", icon: "classroom", allowedRoles: ["admin"] },
       { key: "marks", label: "Marks", icon: "marks" },
-      { key: "resultCards", label: "Results", icon: "report", allowedRoles: ["admin", "accounts", "accountant", "audit"] },
+      { key: "resultCards", label: "Results", icon: "report", allowedRoles: ["admin", "accounts", "accountant", "audit", "cashier"] },
       { key: "classwiseResults", label: "Class Results", icon: "classwiseResults", allowedRoles: NON_STUDENT },
       { key: "routines", label: "Routine", icon: "calendar" },
       { key: "academicCalendar", label: "Calendar", icon: "calendarEvent" },
@@ -119,7 +119,7 @@ function getInitials(name = "User") {
 }
 
 function canOpenSettings(user) {
-  return NON_STUDENT.includes(user?.role);
+  return NON_STUDENT.includes(user?.role) && user?.role !== "cashier";
 }
 
 function UserAvatar({ user, small = false }) {
@@ -393,6 +393,48 @@ export default function AdminLayout({ activeView, children, onLogout, onOpenUser
       <div className="erp-main">
         <main className="content-area">{children}</main>
       </div>
+
+      {/* ── Mobile bottom navigation bar ── */}
+      {isMobile && (() => {
+        const bottomNavItems = [
+          { key: "dashboard",      icon: "dashboard",  label: "Home"     },
+          { key: "students",       icon: "student",    label: "Students" },
+          { key: "marks",          icon: "marks",      label: "Marks"    },
+          { key: "fees",           icon: "card",       label: "Fees"     },
+        ];
+        // Filter to items this role can actually see
+        const allowed = bottomNavItems.filter((item) => {
+          const def = navItems.find((n) => n.key === item.key);
+          if (!def) return true;
+          if (!def.allowedRoles) return true;
+          return def.allowedRoles.includes(user?.role);
+        });
+        return (
+          <nav className="mobile-bottom-nav" aria-label="Quick navigation">
+            {allowed.map((item) => (
+              <button
+                key={item.key}
+                type="button"
+                className={`bottom-nav-btn${activeView === item.key ? " active" : ""}`}
+                onClick={() => handleViewChange(item.key)}
+                aria-label={item.label}
+              >
+                <span className="bottom-nav-icon"><Icon name={item.icon} /></span>
+                <span className="bottom-nav-label">{item.label}</span>
+              </button>
+            ))}
+            <button
+              type="button"
+              className={`bottom-nav-btn${isMobileMenuOpen ? " active" : ""}`}
+              onClick={() => setIsMobileMenuOpen(true)}
+              aria-label="More navigation options"
+            >
+              <span className="bottom-nav-icon"><Icon name="menu" /></span>
+              <span className="bottom-nav-label">More</span>
+            </button>
+          </nav>
+        );
+      })()}
     </div>
   );
 }

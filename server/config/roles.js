@@ -7,6 +7,7 @@ const ALLOWED_ROLES = [
   "audit",
   "accounts",
   "accountant",
+  "cashier",
 ];
 
 module.exports = ALLOWED_ROLES;

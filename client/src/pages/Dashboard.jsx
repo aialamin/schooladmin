@@ -49,7 +49,12 @@ function catalogKeyForClass(className = "") {
   return "primary";
 }
 
-function subjectsForClass(className = "") {
+// NOTE: A runtime version `getSubjectsForClass` is defined inside the component
+// so it can read `data.schoolSettings.classSubjectsConfig`. This module-level
+// version is kept as a fallback for places outside the component.
+function subjectsForClass(className = "", classSubjectsConfig = {}) {
+  const custom = classSubjectsConfig?.[className];
+  if (Array.isArray(custom) && custom.length > 0) return custom;
   return subjectCatalog[catalogKeyForClass(className)] || subjectCatalog.primary;
 }
 
@@ -67,7 +72,7 @@ const emptyForms = {
   mark: { student: "", subject: "", academicYear: year, examType: "monthly", examNo: 1, month: currentMonth, totalMarks: 100, obtainedMarks: 0, contributionPercent: 0, note: "" },
   routine: { className: "", day: "Saturday", startTime: "09:00", endTime: "10:00", subject: "", teacherName: "", room: "", status: "active", note: "" },
   increment: { employee: "", previousSalary: 0, incrementAmount: 0, newSalary: 0, effectiveDate: new Date().toISOString().slice(0, 10), reason: "" },
-  schoolSettings: { schoolName: "Your School Name", shortName: "School", subtitle: "An English Medium School", leftLogoUrl: "", rightLogoUrl: "", address: "School address here", phone: "", schoolEmail: "", website: "", academicYear: year.toString(), academicSession: "January - December", defaultExamTitle: "Progress Report", defaultPassMark: 33, classStartTime: "09:00", supportEmail: "", admissionNotice: "Admission open. Contact school office for details.", principalName: "Principal", resultRemarksDefault: "She/He has been consistently progressing." },
+  schoolSettings: { schoolName: "Your School Name", shortName: "School", subtitle: "An English Medium School", leftLogoUrl: "", rightLogoUrl: "", address: "School address here", phone: "", schoolEmail: "", website: "", academicYear: year.toString(), academicSession: "January - December", defaultExamTitle: "Progress Report", defaultPassMark: 33, classStartTime: "09:00", supportEmail: "", admissionNotice: "Admission open. Contact school office for details.", principalName: "Principal", resultRemarksDefault: "She/He has been consistently progressing.", classSubjectsConfig: {} },
   userSettings: { name: "", email: "", photoUrl: "", currentPassword: "", newPassword: "", confirmPassword: "" },
   attendance: { employee: "", date: new Date().toISOString().slice(0, 10), checkIn: "", checkOut: "", status: "present", method: "manual", note: "" },
   expense: { title: "", category: "other", amount: 0, date: new Date().toISOString().slice(0, 10), paidTo: "", paymentMethod: "cash", receiptNo: "", note: "" },
@@ -232,6 +237,20 @@ function DashboardIcon({ name, className = "" }) {
     plug: <><path d="M12 22v-5" /><path d="M9 7V2" /><path d="M15 7V2" /><path d="M6 13V7h12v6a6 6 0 0 1-6 6 6 6 0 0 1-6-6Z" /></>,
     checkCircle: <><path d="M22 11.07V12a10 10 0 1 1-5.93-9.14" /><path d="m9 11 3 3 8-8" /></>,
     alertCircle: <><circle cx="12" cy="12" r="10" /><path d="M12 8v4" /><path d="M12 16h.01" /></>,
+    shield: <><path d="M12 2 3 7v5c0 5.25 4.17 10.15 9 11 4.83-.85 9-5.75 9-11V7l-9-5Z" /><path d="m9 12 2 2 4-4" /></>,
+    key: <><path d="M21 2 7 16" /><path d="M12 11a5 5 0 1 0-9.9 1.5A5 5 0 0 0 7.5 17H9v2h2v2h3v-3l.5-.5A5 5 0 0 0 12 11Z" /></>,
+    users: <><path d="M9 10a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z" /><path d="M2.8 21c.6-3.9 2.9-6.2 6.2-6.2s5.6 2.3 6.2 6.2" /><path d="M17.5 10.2a3 3 0 1 0-.8-5.8" /><path d="M17.2 14.6c2.3.5 3.8 2.5 4.2 5.4" /></>,
+    clock: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 3" /></>,
+    search: <><circle cx="11" cy="11" r="7" /><path d="m21 21-4.35-4.35" /></>,
+    folder: <><path d="M3 7h4l2-2h8a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2Z" /></>,
+    warning: <><path d="m10.29 3.86-8.6 14.9A1 1 0 0 0 2.54 20h17.92a1 1 0 0 0 .86-1.5l-8.6-14.9a1 1 0 0 0-1.73.26Z" /><path d="M12 9v4" /><path d="M12 17h.01" /></>,
+    phone: <><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.62 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 9.91a16 16 0 0 0 6.06 6.06l.97-.97a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92Z" /></>,
+    mail: <><rect x="2" y="4" width="20" height="16" rx="2" /><path d="m2 7 10 7 10-7" /></>,
+    mapPin: <><path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 0 1 16 0Z" /><circle cx="12" cy="10" r="3" /></>,
+    chevronLeft: <><path d="m15 18-6-6 6-6" /></>,
+    chevronRight: <><path d="m9 18 6-6-6-6" /></>,
+    close: <><path d="m6 6 12 12" /><path d="M18 6 6 18" /></>,
+    cashier: <><rect x="2" y="5" width="20" height="14" rx="2" /><path d="M2 10h20" /><path d="M6 15h.01" /><path d="M10 15h4" /></>,
   };
 
   return <svg {...props}>{icons[name] || icons.chart}</svg>;
@@ -633,6 +652,98 @@ function downloadSalaryPaymentReceipt(salary, settings) {
   return writePrintDocument(printWindow, salaryPaymentReceiptHtml(salary, settings));
 }
 
+function cashierReceiptHtml(payment = {}, billNo = "", settings = {}) {
+  const student = payment.student || {};
+  const date = new Date(payment.updatedAt || payment.createdAt || Date.now());
+  const dateStr = date.toLocaleDateString("en-BD", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
+  const timeStr = date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  const dueAmt = Number(payment.dueAmount || 0);
+  const paidStatus = dueAmt > 0 ? "Partial Payment" : "Paid in Full";
+  const paidColor = dueAmt > 0 ? "#d97706" : "#059669";
+  return `<!doctype html>
+<html><head><meta charset="utf-8"/><title>Fee Receipt - ${escapeHtml(billNo)}</title><style>
+* { box-sizing: border-box; }
+body { margin: 0; padding: 20px; font-family: Arial, Helvetica, sans-serif; background: #f3f4f6; color: #111827; }
+.receipt { width: 680px; max-width: 100%; margin: 0 auto; background: #fff; border: 1px solid #d1d5db; border-radius: 16px; padding: 28px 32px; }
+.school-header { text-align: center; border-bottom: 2.5px solid #1d4ed8; padding-bottom: 16px; margin-bottom: 20px; }
+.school-header h1 { margin: 0; font-size: 26px; color: #1d4ed8; text-transform: uppercase; letter-spacing: 2px; }
+.school-header p { margin: 3px 0 0; color: #475569; font-size: 13px; }
+.bill-banner { display: flex; justify-content: space-between; align-items: center; background: #eff6ff; border: 1.5px solid #bfdbfe; border-radius: 12px; padding: 14px 18px; margin-bottom: 20px; }
+.bill-lbl { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; color: #2563eb; }
+.bill-num { font-size: 24px; font-weight: 900; color: #1d4ed8; letter-spacing: 1px; margin-top: 2px; }
+.bill-date { font-size: 12px; color: #475569; margin-top: 4px; }
+.stamp { border: 3px solid #16a34a; color: #16a34a; border-radius: 50px; padding: 8px 18px; font-weight: 900; font-size: 15px; letter-spacing: 3px; transform: rotate(-6deg); }
+.info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; }
+.info-box { border: 1px solid #e5e7eb; border-radius: 10px; padding: 12px; }
+.info-box .lbl { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: #6b7280; }
+.info-box .val { font-size: 15px; font-weight: 700; color: #111827; margin-top: 4px; }
+table { width: 100%; border-collapse: collapse; margin-bottom: 14px; }
+th { background: #f8fafc; padding: 10px 12px; text-align: left; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: #6b7280; border-bottom: 2px solid #e5e7eb; }
+td { padding: 12px; border-bottom: 1px solid #e5e7eb; font-size: 14px; }
+.amount { text-align: right; font-weight: 700; }
+.summary { border: 1px solid #e5e7eb; border-radius: 10px; overflow: hidden; margin-left: auto; width: 300px; max-width: 100%; margin-bottom: 22px; }
+.srow { display: flex; justify-content: space-between; padding: 10px 14px; border-bottom: 1px solid #e5e7eb; font-size: 14px; }
+.srow:last-child { border-bottom: 0; background: #eff6ff; font-weight: 900; font-size: 15px; }
+.note-box { color: #64748b; font-size: 12px; border: 1px solid #e5e7eb; border-radius: 8px; padding: 10px 12px; margin-bottom: 16px; }
+.signatures { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 44px; }
+.sig-line { border-top: 1.5px solid #374151; padding-top: 8px; text-align: center; font-size: 13px; font-weight: 700; color: #374151; }
+.footer-note { color: #64748b; font-size: 11px; text-align: center; margin-top: 14px; }
+.powered { color: #2563eb; font-size: 11px; text-align: center; margin-top: 4px; font-weight: 700; }
+@media print { body { background: #fff; padding: 0; } .receipt { border-radius: 0; border: 0; width: 100%; } @page { size: A5; margin: 8mm; } }
+</style></head>
+<body>
+<div class="receipt">
+  <div class="school-header">
+    <h1>${escapeHtml(settings.schoolName || "School")}</h1>
+    ${settings.subtitle ? `<p>${escapeHtml(settings.subtitle)}</p>` : ""}
+    <p>${escapeHtml(settings.address || "")}${settings.phone ? ` &bull; Tel: ${escapeHtml(settings.phone)}` : ""}</p>
+  </div>
+  <div class="bill-banner">
+    <div>
+      <div class="bill-lbl">Bill / Receipt Number</div>
+      <div class="bill-num">${escapeHtml(billNo)}</div>
+      <div class="bill-date">${escapeHtml(dateStr)} &bull; ${escapeHtml(timeStr)}</div>
+    </div>
+    <div class="stamp">RECEIVED</div>
+  </div>
+  <div class="info-grid">
+    <div class="info-box"><div class="lbl">Student Name</div><div class="val">${escapeHtml(student.name || "—")}</div></div>
+    <div class="info-box"><div class="lbl">Class / Roll No.</div><div class="val">${escapeHtml(student.className || "—")} / ${escapeHtml(String(student.rollNumber || "—"))}</div></div>
+    <div class="info-box"><div class="lbl">Guardian</div><div class="val">${escapeHtml(student.contactInfo?.guardianName || "—")}</div></div>
+    <div class="info-box"><div class="lbl">Contact Phone</div><div class="val">${escapeHtml(student.contactInfo?.phone || "—")}</div></div>
+  </div>
+  <table>
+    <thead><tr><th>Description</th><th>Period</th><th class="amount">Amount</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>${escapeHtml(feeLabel(payment))}</td>
+        <td>${escapeHtml(payment.billingMonth || payment.term || date.toLocaleDateString())}</td>
+        <td class="amount">${money.format(payment.amount || 0)}</td>
+      </tr>
+    </tbody>
+  </table>
+  <div class="summary">
+    <div class="srow"><span>Total Fee</span><strong>${money.format(payment.amount || 0)}</strong></div>
+    <div class="srow"><span>Amount Received</span><strong style="color:#059669">${money.format(payment.paidAmount || 0)}</strong></div>
+    ${dueAmt > 0 ? `<div class="srow"><span>Balance Due</span><strong style="color:#dc2626">${money.format(dueAmt)}</strong></div>` : ""}
+    <div class="srow"><span>Status</span><strong style="color:${paidColor}">${escapeHtml(paidStatus)}</strong></div>
+  </div>
+  ${payment.note ? `<div class="note-box"><strong>Note:</strong> ${escapeHtml(payment.note)}</div>` : ""}
+  <div class="signatures">
+    <div class="sig-line">Cashier / Accounts</div>
+    <div class="sig-line">Guardian Signature</div>
+  </div>
+  <p class="footer-note">Please retain this receipt as proof of payment.</p>
+  <p class="powered">School Management System &bull; ${escapeHtml(settings.schoolName || "School")}</p>
+</div>
+</body></html>`;
+}
+
+function downloadCashierReceipt(payment, billNo, settings) {
+  const printWindow = window.open("", "_blank", "width=760,height=660");
+  return writePrintDocument(printWindow, cashierReceiptHtml(payment, billNo, settings));
+}
+
 const tablePageSize = 80;
 
 const DataTable = memo(function DataTable({ columns, rows, title, subtitle, searchable = true, searchPlaceholder = "Search records..." }) {
@@ -783,6 +894,26 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
   const [payEmpNote, setPayEmpNote]       = useState("");
   const [payEmpLoading, setPayEmpLoading] = useState(false);
 
+  // Payment modal — smart student picker
+  const [payStudentSearch, setPayStudentSearch] = useState("");
+  const [payStudentOpen, setPayStudentOpen] = useState(false);
+  const [payStudentMode, setPayStudentMode] = useState("search"); // "search" | "browse"
+  const [payStudentClass, setPayStudentClass] = useState("");
+  const [payStudentSection, setPayStudentSection] = useState("");
+
+  // Cashier quick-pay state
+  const [cashierStudentSearch, setCashierStudentSearch] = useState("");
+  const [cashierStudentOpen, setCashierStudentOpen] = useState(false);
+  const [cashierStudent, setCashierStudent] = useState(null);
+  const [cashierFeeType, setCashierFeeType] = useState("monthly");
+  const [cashierAmount, setCashierAmount] = useState(0);
+  const [cashierPaidAmount, setCashierPaidAmount] = useState(0);
+  const [cashierBillingMonth, setCashierBillingMonth] = useState(currentMonth);
+  const [cashierTerm, setCashierTerm] = useState("");
+  const [cashierNote, setCashierNote] = useState("");
+  const [cashierPaying, setCashierPaying] = useState(false);
+  const [cashierLastReceipt, setCashierLastReceipt] = useState(null); // { payment, billNo }
+
   // Database configuration state (admin only)
   const [dbConfig, setDbConfig] = useState(null);
   const [dbUriInput, setDbUriInput] = useState("");
@@ -792,6 +923,16 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
   const [dbSaveLoading, setDbSaveLoading] = useState(false);
   const [dbConfirmPending, setDbConfirmPending] = useState(false);
   const [dbResetPending, setDbResetPending] = useState(false);
+
+  // Admin settings panels
+  const [teacherAccessOpen, setTeacherAccessOpen] = useState(false);
+  const [teacherAccessSaving, setTeacherAccessSaving] = useState({}); // { employeeId: true }
+  const [subjectMgmtOpen, setSubjectMgmtOpen] = useState(false);
+  const [subjectMgmtClass, setSubjectMgmtClass] = useState(""); // selected class in subject mgmt
+  const [subjectMgmtDraft, setSubjectMgmtDraft] = useState({}); // local draft { className: [subjects] }
+  const [subjectMgmtSaving, setSubjectMgmtSaving] = useState(false);
+  const [roleMgmtOpen, setRoleMgmtOpen] = useState(false);
+  const [roleChangeSaving, setRoleChangeSaving] = useState({}); // { userId: true }
 
   // User account management (admin only)
   const [allUsers, setAllUsers] = useState([]);
@@ -818,8 +959,8 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
     const email = String(user.email || "").toLowerCase();
     return email ? data.students.find((s) => String(s.contactInfo?.email || "").toLowerCase() === email) || null : null;
   }, [user.role, user.email, data.students]);
-  const paymentWriteAllowed = financeAllowed; // teachers cannot record payments
-  const teacherReadAllowed = ["admin", "teacher", "staff", "accounts", "accountant", "audit"].includes(user.role);
+  const paymentWriteAllowed = financeAllowed || user.role === "cashier";
+  const teacherReadAllowed = ["admin", "teacher", "staff", "accounts", "accountant", "audit", "cashier"].includes(user.role);
   const studentReadAllowed = teacherReadAllowed || user.role === "student";
   const teacherAllowed = isAdmin || (user.role === "teacher" && isAssignedClassTeacher);
   const studentWriteAllowed = isAdmin || (user.role === "teacher" && isAssignedClassTeacher);
@@ -894,7 +1035,7 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
     if (!form.student) { setMarkBulkRows([]); return; }
     const student = data.students.find((s) => s._id === form.student);
     if (!student) { setMarkBulkRows([]); return; }
-    const subjects = subjectsForClass(student.className);
+    const subjects = subjectsForClass(student.className, data.schoolSettings?.classSubjectsConfig);
     const defaultTotal = markTotalMarksRef.current;
     setMarkBulkRows(subjects.map((subject) => ({ subject, totalMarks: defaultTotal, obtainedMarks: "", note: "", enabled: true })));
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -949,6 +1090,7 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
         setForm(emptyForms[type]);
       }
       if (type === "mark") setMarkEntryClass(""); // reset class filter for fresh entry
+      if (type === "payment") { setPayStudentSearch(""); setPayStudentClass(""); setPayStudentSection(""); setPayStudentMode("search"); setPayStudentOpen(false); }
       setModal(type);
       return;
     }
@@ -998,6 +1140,7 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
         term: row.term || "",
         note: row.note || "",
       });
+      setPayStudentSearch(""); setPayStudentClass(""); setPayStudentSection(""); setPayStudentMode("search"); setPayStudentOpen(false);
     }
     if (type === "mark") {
       setForm({
@@ -1687,7 +1830,7 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
     { key: "name", label: "Student", search: (row) => `${row.name} ${row.rollNumber} ${row.contactInfo?.email || ""}`, render: (row) => (
       <div>
         <strong>{row.name}</strong>
-        <small>Roll {row.rollNumber}{row.gender ? ` · ${row.gender === "male" ? "♂ Boy" : row.gender === "female" ? "♀ Girl" : row.gender}` : ""}</small>
+        <small>Roll {row.rollNumber}{row.gender ? ` · ${row.gender === "male" ? "Boy" : row.gender === "female" ? "Girl" : row.gender}` : ""}</small>
       </div>
     )},
     { key: "class", label: "Class / Section", search: (row) => `${row.className} ${row.section?.sectionName || ""}`, render: (row) => (
@@ -1897,7 +2040,447 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
     )},
   ], [financeAllowed, openModal, handleDelete, isAdmin]);
 
+  // ── Cashier quick-pay dashboard ─────────────────────────────────────────────
+  const renderCashierDashboard = () => {
+    const today = new Date().toISOString().slice(0, 10);
+    const todayPayments = data.payments.filter((p) => {
+      const d = String(p.updatedAt || p.createdAt || "");
+      return d.slice(0, 10) === today;
+    });
+    const todayTotal = todayPayments.reduce((s, p) => s + Number(p.paidAmount || 0), 0);
+    const studentsWithDue = data.students
+      .filter((s) => (s.dueAmount || 0) > 0)
+      .sort((a, b) => (b.dueAmount || 0) - (a.dueAmount || 0));
+    const totalPendingDue = studentsWithDue.reduce((s, x) => s + (x.dueAmount || 0), 0);
+
+    const cashierSearchLower = cashierStudentSearch.toLowerCase().trim();
+    const cashierSearchResults = cashierSearchLower.length >= 1
+      ? data.students.filter((s) => {
+          const name = String(s.name || "").toLowerCase();
+          const roll = String(s.rollNumber || "").toLowerCase();
+          const cls  = String(s.className || "").toLowerCase();
+          const id   = String(s._id || "").toLowerCase();
+          return name.includes(cashierSearchLower) || roll.includes(cashierSearchLower) || cls.includes(cashierSearchLower) || id.includes(cashierSearchLower);
+        }).slice(0, 12)
+      : [];
+
+    const studentClassFee = cashierStudent
+      ? data.classFees.find((f) => f.className === cashierStudent.className)
+      : null;
+
+    const studentDuePayments = cashierStudent
+      ? data.payments.filter((p) => String(p.student?._id || p.student) === String(cashierStudent._id) && (p.dueAmount || 0) > 0)
+      : [];
+    const studentTotalDue = studentDuePayments.reduce((s, p) => s + (p.dueAmount || 0), 0);
+
+    const feeAmountMap = {
+      monthly:   studentClassFee?.monthlyFee   || 0,
+      admission: studentClassFee?.admissionFee || 0,
+      session:   studentClassFee?.sessionFee   || 0,
+      exam:      studentClassFee?.examFee      || 0,
+    };
+
+    const selectCashierStudent = (s) => {
+      setCashierStudent(s);
+      setCashierStudentSearch("");
+      setCashierStudentOpen(false);
+      const fee = data.classFees.find((f) => f.className === s.className);
+      const amt = fee?.monthlyFee || 0;
+      setCashierFeeType("monthly");
+      setCashierAmount(amt);
+      setCashierPaidAmount(amt);
+      setCashierBillingMonth(currentMonth);
+      setCashierTerm("");
+      setCashierNote("");
+    };
+
+    const handleCashierPayment = async () => {
+      if (!cashierStudent || cashierPaying) return;
+      const amt  = Number(cashierAmount || 0);
+      const paid = Number(cashierPaidAmount || 0);
+      if (paid <= 0) { setError("Enter the amount received from the guardian."); return; }
+      setCashierPaying(true);
+      setError("");
+      try {
+        const payload = {
+          student:      cashierStudent._id,
+          feeType:      cashierFeeType,
+          amount:       amt,
+          paidAmount:   paid,
+          billingMonth: cashierFeeType === "monthly" ? cashierBillingMonth : undefined,
+          term:         cashierFeeType === "exam"    ? cashierTerm        : undefined,
+          note:         cashierNote || "Payment received",
+        };
+        const { data: res } = await erpApi.createPayment(token, payload);
+        const savedPayment = res.payment || res;
+        const monthKey = cashierBillingMonth.replace("-", "");
+        const idSuffix = String(savedPayment._id || Date.now()).slice(-6).toUpperCase();
+        const billNo = `REC-${monthKey}-${idSuffix}`;
+        const partial = await refreshPartialData(token, ["payments", "students", "dashboard"]);
+        setData((prev) => ({ ...prev, ...partial }));
+        setCashierLastReceipt({
+          payment: { ...savedPayment, student: cashierStudent },
+          billNo,
+        });
+        showDoneAlert(`Payment of ${money.format(paid)} recorded for ${cashierStudent.name}. Bill #${billNo}`);
+        // Auto-print receipt
+        downloadCashierReceipt({ ...savedPayment, student: cashierStudent }, billNo, schoolSettings);
+        setCashierFeeType("monthly");
+        setCashierAmount(studentClassFee?.monthlyFee || 0);
+        setCashierPaidAmount(studentClassFee?.monthlyFee || 0);
+        setCashierNote("");
+      } catch (err) {
+        setError(getErrorMessage(err));
+      } finally {
+        setCashierPaying(false);
+      }
+    };
+
+    const statItems = [
+      { label: "Today's Collection", value: money.format(todayTotal), color: "#059669", bg: "color-mix(in srgb,#059669 10%,var(--app-surface,#fff))" },
+      { label: "Payments Today",     value: todayPayments.length,       color: "#2563eb", bg: "color-mix(in srgb,#2563eb 10%,var(--app-surface,#fff))" },
+      { label: "Students With Due",  value: studentsWithDue.length,     color: "#d97706", bg: "color-mix(in srgb,#d97706 10%,var(--app-surface,#fff))" },
+      { label: "Total Pending",      value: money.format(totalPendingDue), color: "#dc2626", bg: "color-mix(in srgb,#dc2626 10%,var(--app-surface,#fff))" },
+    ];
+
+    return (
+      <div className="stack">
+        <SectionHeader
+          eyebrow="Cashier"
+          title="Fee Collection"
+          action={cashierLastReceipt && (
+            <button className="btn primary" type="button" style={{ display: "flex", alignItems: "center", gap: "6px" }}
+              onClick={() => {
+                if (!downloadCashierReceipt(cashierLastReceipt.payment, cashierLastReceipt.billNo, schoolSettings)) {
+                  setError("Popup blocked. Please allow popups and try again.");
+                }
+              }}>
+              <DashboardIcon name="pdf" className="chip-icon" /> Re-print Last Receipt
+            </button>
+          )}
+        />
+
+        {/* Stat row */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(155px, 1fr))", gap: "12px" }}>
+          {statItems.map(({ label, value, color, bg }) => (
+            <div key={label} style={{ background: bg, border: `1px solid ${color}22`, borderRadius: "14px", padding: "16px" }}>
+              <p style={{ margin: "0 0 5px", fontSize: "11px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color }}>{label}</p>
+              <p style={{ margin: 0, fontSize: "20px", fontWeight: 800, color }}>{value}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* Main area: student selector + payment form */}
+        <div style={{ display: "grid", gridTemplateColumns: cashierStudent ? "1fr 1fr" : "1fr", gap: "20px", alignItems: "start" }}>
+
+          {/* Student panel */}
+          <section className="panel" style={{ padding: "22px" }}>
+            <h3 style={{ margin: "0 0 16px", fontSize: "15px", fontWeight: 700, display: "flex", alignItems: "center", gap: "8px" }}>
+              <DashboardIcon name="student" className="chip-icon" />
+              {cashierStudent ? "Selected Student" : "Find Student"}
+            </h3>
+
+            {cashierStudent ? (
+              <div>
+                {/* Student info */}
+                <div style={{ background: "var(--app-surface-2,#f8fafc)", border: "1px solid var(--app-border,#e2e8f0)", borderRadius: "12px", padding: "14px 16px" }}>
+                  <p style={{ margin: "0 0 2px", fontSize: "17px", fontWeight: 800, color: "var(--app-text,#1e293b)" }}>{cashierStudent.name}</p>
+                  <p style={{ margin: "0 0 6px", fontSize: "13px", color: "var(--app-muted,#64748b)" }}>
+                    {cashierStudent.className}
+                    {cashierStudent.rollNumber ? ` · Roll #${cashierStudent.rollNumber}` : ""}
+                    {cashierStudent.section?.sectionName ? ` · ${cashierStudent.section.sectionName}` : ""}
+                  </p>
+                  {cashierStudent.contactInfo?.guardianName && (
+                    <p style={{ margin: "3px 0 0", fontSize: "12.5px", color: "var(--app-muted,#64748b)", display: "flex", alignItems: "center", gap: "4px" }}>
+                      <DashboardIcon name="profile" className="chip-icon" /> Guardian: <strong style={{ color: "var(--app-text,#1e293b)" }}>{cashierStudent.contactInfo.guardianName}</strong>
+                    </p>
+                  )}
+                  {cashierStudent.contactInfo?.phone && (
+                    <p style={{ margin: "3px 0 0", fontSize: "12.5px", color: "var(--app-muted,#64748b)", display: "flex", alignItems: "center", gap: "4px" }}>
+                      <DashboardIcon name="phone" className="chip-icon" /> {cashierStudent.contactInfo.phone}
+                    </p>
+                  )}
+                  {/* Class teacher info */}
+                  {(() => {
+                    const sec = data.sections.find((s) => {
+                      const sid = s._id || "";
+                      const studentSec = cashierStudent.section?._id || cashierStudent.section || "";
+                      return String(sid) === String(studentSec);
+                    });
+                    const ctId = sec?.classTeacher?._id || sec?.classTeacher;
+                    const ct = ctId ? data.employees.find((e) => String(e._id) === String(ctId)) : null;
+                    if (!ct) return null;
+                    return (
+                      <p style={{ margin: "3px 0 0", fontSize: "12.5px", color: "var(--app-muted,#64748b)", display: "flex", alignItems: "center", gap: "4px" }}>
+                        <DashboardIcon name="users" className="chip-icon" /> Class Teacher: <strong style={{ color: "var(--app-text,#1e293b)" }}>{ct.name}</strong>
+                      </p>
+                    );
+                  })()}
+                </div>
+
+                {/* Due alerts */}
+                {studentTotalDue > 0 && (
+                  <div style={{ background: "rgba(220,38,38,0.06)", border: "1px solid rgba(220,38,38,0.2)", borderRadius: "10px", padding: "12px 14px", marginTop: "10px" }}>
+                    <p style={{ margin: "0 0 6px", fontSize: "12.5px", fontWeight: 700, color: "#dc2626", display: "flex", alignItems: "center", gap: "5px" }}>
+                      <DashboardIcon name="alertCircle" className="chip-icon" />
+                      Outstanding Due: {money.format(studentTotalDue)}
+                    </p>
+                    {studentDuePayments.slice(0, 4).map((p) => (
+                      <div key={p._id} style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", color: "var(--app-muted,#64748b)", padding: "2px 0" }}>
+                        <span className="capitalize">{p.feeType} {p.billingMonth || p.term || ""}</span>
+                        <span style={{ fontWeight: 600, color: "#dc2626" }}>{money.format(p.dueAmount)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <button className="btn soft" type="button" style={{ marginTop: "12px", fontSize: "12px" }} onClick={() => setCashierStudent(null)}>
+                  Change Student
+                </button>
+              </div>
+            ) : (
+              <div>
+                {/* Search input */}
+                <div style={{ position: "relative", marginBottom: "14px" }}>
+                  <div style={{ position: "relative" }}>
+                    <span style={{ position: "absolute", left: "13px", top: "50%", transform: "translateY(-50%)", color: "var(--app-muted,#94a3b8)", pointerEvents: "none", display: "flex" }}>
+                      <DashboardIcon name="search" className="chip-icon" />
+                    </span>
+                    <input
+                      className="control"
+                      style={{ paddingLeft: "38px", fontSize: "15px", fontWeight: 600 }}
+                      placeholder="Name, roll number, class…"
+                      autoComplete="off"
+                      value={cashierStudentSearch}
+                      onChange={(e) => { setCashierStudentSearch(e.target.value); setCashierStudentOpen(true); }}
+                      onFocus={() => setCashierStudentOpen(true)}
+                      onBlur={() => setTimeout(() => setCashierStudentOpen(false), 160)}
+                    />
+                  </div>
+                  {cashierStudentOpen && cashierSearchResults.length > 0 && (
+                    <ul style={{ position: "absolute", top: "calc(100% + 3px)", left: 0, right: 0, zIndex: 200, margin: 0, padding: "4px 0", listStyle: "none", background: "var(--app-surface,#fff)", border: "1px solid var(--app-border,#e2e8f0)", borderRadius: "14px", maxHeight: "260px", overflowY: "auto", boxShadow: "0 16px 40px rgba(15,23,42,0.16)" }}>
+                      {cashierSearchResults.map((s) => (
+                        <li key={s._id}>
+                          <button type="button" style={{ width: "100%", textAlign: "left", background: "none", border: "none", padding: "11px 16px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px" }}
+                            onMouseDown={() => selectCashierStudent(s)}>
+                            <div>
+                              <strong style={{ fontSize: "13.5px" }}>{s.name}</strong>
+                              <span style={{ fontSize: "12px", color: "var(--app-muted,#64748b)", marginLeft: "7px" }}>{s.className}{s.rollNumber ? ` · Roll ${s.rollNumber}` : ""}</span>
+                            </div>
+                            {(s.dueAmount || 0) > 0 && (
+                              <span style={{ fontSize: "12px", fontWeight: 700, color: "#dc2626", background: "rgba(220,38,38,0.09)", padding: "2px 8px", borderRadius: "6px", flexShrink: 0 }}>
+                                Due: {money.format(s.dueAmount)}
+                              </span>
+                            )}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+
+                {/* Quick list: students with dues */}
+                {!cashierStudentSearch && studentsWithDue.length > 0 && (
+                  <div>
+                    <p style={{ margin: "0 0 8px", fontSize: "11px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "var(--app-muted,#64748b)" }}>Students with Dues</p>
+                    <div style={{ display: "flex", flexDirection: "column", gap: "6px", maxHeight: "260px", overflowY: "auto" }}>
+                      {studentsWithDue.slice(0, 10).map((s) => (
+                        <button key={s._id} type="button"
+                          style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px", padding: "10px 12px", background: "var(--app-surface-2,#f8fafc)", border: "1px solid var(--app-border,#e2e8f0)", borderRadius: "10px", cursor: "pointer", textAlign: "left" }}
+                          onClick={() => selectCashierStudent(s)}>
+                          <div>
+                            <strong style={{ fontSize: "13px" }}>{s.name}</strong>
+                            <span style={{ fontSize: "11.5px", color: "var(--app-muted,#64748b)", marginLeft: "6px" }}>{s.className}{s.rollNumber ? ` · Roll ${s.rollNumber}` : ""}</span>
+                          </div>
+                          <span style={{ fontSize: "13px", fontWeight: 800, color: "#dc2626", flexShrink: 0 }}>{money.format(s.dueAmount)}</span>
+                        </button>
+                      ))}
+                      {studentsWithDue.length > 10 && (
+                        <p style={{ margin: "4px 0 0", fontSize: "12px", color: "var(--app-muted,#64748b)", textAlign: "center" }}>
+                          +{studentsWithDue.length - 10} more — use search to find them
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
+                {!cashierStudentSearch && studentsWithDue.length === 0 && (
+                  <p style={{ fontSize: "13px", color: "var(--app-muted,#64748b)", textAlign: "center", padding: "24px 0" }}>No outstanding dues. Type a name to find any student.</p>
+                )}
+              </div>
+            )}
+          </section>
+
+          {/* Payment form — only when student selected */}
+          {cashierStudent && (
+            <section className="panel" style={{ padding: "22px" }}>
+              <h3 style={{ margin: "0 0 16px", fontSize: "15px", fontWeight: 700, display: "flex", alignItems: "center", gap: "8px" }}>
+                <DashboardIcon name="wallet" className="chip-icon" />
+                Record Payment
+              </h3>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+                {/* Fee type */}
+                <div>
+                  <label style={{ display: "block", fontSize: "11px", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.07em", color: "var(--app-muted,#64748b)", marginBottom: "7px" }}>Fee Type</label>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+                    {[
+                      { key: "monthly",   label: "Monthly"   },
+                      { key: "admission", label: "Admission" },
+                      { key: "session",   label: "Session"   },
+                      { key: "exam",      label: "Exam"      },
+                      { key: "other",     label: "Other"     },
+                    ].map(({ key, label }) => (
+                      <button key={key} type="button"
+                        className={`btn ${cashierFeeType === key ? "primary" : "soft"}`}
+                        style={{ padding: "7px 14px", fontSize: "12.5px", borderRadius: "10px" }}
+                        onClick={() => {
+                          setCashierFeeType(key);
+                          const a = feeAmountMap[key] ?? 0;
+                          setCashierAmount(a);
+                          setCashierPaidAmount(a);
+                        }}>
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Billing month */}
+                {cashierFeeType === "monthly" && (
+                  <div>
+                    <label style={{ display: "block", fontSize: "11px", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.07em", color: "var(--app-muted,#64748b)", marginBottom: "7px" }}>Billing Month</label>
+                    <input className="control" type="month" value={cashierBillingMonth} onChange={(e) => setCashierBillingMonth(e.target.value)} />
+                  </div>
+                )}
+
+                {/* Exam term */}
+                {cashierFeeType === "exam" && (
+                  <div>
+                    <label style={{ display: "block", fontSize: "11px", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.07em", color: "var(--app-muted,#64748b)", marginBottom: "7px" }}>Exam Term</label>
+                    <input className="control" value={cashierTerm} onChange={(e) => setCashierTerm(e.target.value)} placeholder="e.g. Term 1, Mid-year…" />
+                  </div>
+                )}
+
+                {/* Total amount */}
+                <div>
+                  <label style={{ display: "block", fontSize: "11px", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.07em", color: "var(--app-muted,#64748b)", marginBottom: "7px" }}>
+                    Total Fee Amount
+                    {studentClassFee && cashierFeeType !== "other" && <span style={{ fontWeight: 400, marginLeft: "6px", color: "var(--app-primary,#2563eb)", textTransform: "none" }}>auto-filled</span>}
+                  </label>
+                  <input className="control" type="number" min="0" value={cashierAmount} onChange={(e) => setCashierAmount(e.target.value)} style={{ fontSize: "16px", fontWeight: 700 }} />
+                </div>
+
+                {/* Amount received */}
+                <div>
+                  <label style={{ display: "block", fontSize: "11px", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.07em", color: "var(--app-muted,#64748b)", marginBottom: "7px" }}>
+                    Amount Received
+                    <span style={{ fontWeight: 400, marginLeft: "6px", color: "var(--app-success,#059669)", textTransform: "none" }}>cash from guardian</span>
+                  </label>
+                  <input
+                    className="control"
+                    type="number"
+                    min="0"
+                    value={cashierPaidAmount}
+                    onChange={(e) => setCashierPaidAmount(e.target.value)}
+                    style={{ fontSize: "22px", fontWeight: 800, padding: "13px 14px", borderRadius: "12px", border: "2.5px solid #2563eb", background: "#eff6ff", color: "#1d4ed8" }}
+                    autoFocus
+                  />
+                  {Number(cashierAmount) > 0 && Number(cashierPaidAmount) > 0 && Number(cashierPaidAmount) < Number(cashierAmount) && (
+                    <p style={{ margin: "5px 0 0", fontSize: "12.5px", color: "#dc2626", fontWeight: 700 }}>
+                      Remaining due: {money.format(Number(cashierAmount) - Number(cashierPaidAmount))}
+                    </p>
+                  )}
+                </div>
+
+                {/* Note */}
+                <div>
+                  <label style={{ display: "block", fontSize: "11px", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.07em", color: "var(--app-muted,#64748b)", marginBottom: "7px" }}>Note (optional)</label>
+                  <input className="control" value={cashierNote} onChange={(e) => setCashierNote(e.target.value)} placeholder="e.g. Cash received at counter" />
+                </div>
+
+                {/* Submit */}
+                <button
+                  className="btn primary"
+                  type="button"
+                  disabled={cashierPaying || Number(cashierPaidAmount) <= 0}
+                  onClick={handleCashierPayment}
+                  style={{ padding: "16px", fontSize: "16px", fontWeight: 800, borderRadius: "14px", marginTop: "4px" }}
+                >
+                  {cashierPaying
+                    ? "Processing…"
+                    : `Record Payment · ${money.format(Number(cashierPaidAmount) || 0)}`}
+                </button>
+              </div>
+            </section>
+          )}
+        </div>
+
+        {/* Last receipt bar */}
+        {cashierLastReceipt && (
+          <section className="panel" style={{ background: "rgba(5,150,105,0.04)", border: "1px solid rgba(5,150,105,0.25)", padding: "16px 20px" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "12px" }}>
+              <div>
+                <p style={{ margin: "0 0 2px", fontSize: "11px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "#059669" }}>Last Transaction</p>
+                <p style={{ margin: 0, fontSize: "15px", fontWeight: 700, color: "var(--app-text,#1e293b)" }}>
+                  Bill # <span style={{ fontFamily: "monospace", color: "#1d4ed8" }}>{cashierLastReceipt.billNo}</span>
+                  <span style={{ marginLeft: "12px", fontSize: "13px", fontWeight: 400, color: "var(--app-muted,#64748b)" }}>
+                    {cashierLastReceipt.payment.student?.name} · {money.format(cashierLastReceipt.payment.paidAmount || 0)} received
+                  </span>
+                </p>
+              </div>
+              <button className="btn success" type="button" style={{ display: "flex", alignItems: "center", gap: "6px" }}
+                onClick={() => {
+                  if (!downloadCashierReceipt(cashierLastReceipt.payment, cashierLastReceipt.billNo, schoolSettings)) {
+                    setError("Popup blocked. Please allow popups.");
+                  }
+                }}>
+                <DashboardIcon name="pdf" className="chip-icon" /> Print Receipt
+              </button>
+            </div>
+          </section>
+        )}
+
+        {/* Today's transactions table */}
+        {todayPayments.length > 0 && (
+          <section className="panel">
+            <h3 style={{ margin: "0 0 14px", fontSize: "15px", fontWeight: 700 }}>Today&apos;s Collections — {todayPayments.length} payment{todayPayments.length !== 1 ? "s" : ""}</h3>
+            <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px", minWidth: "500px" }}>
+                <thead>
+                  <tr style={{ borderBottom: "2px solid var(--app-border,#e2e8f0)" }}>
+                    {["Time", "Student", "Class", "Fee Type", "Paid", "Due"].map((h) => (
+                      <th key={h} style={{ padding: "8px 10px", textAlign: "left", fontWeight: 700, fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.07em", color: "var(--app-muted,#64748b)" }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {todayPayments.map((p) => (
+                    <tr key={p._id} style={{ borderBottom: "1px solid var(--app-border,#e2e8f0)" }}>
+                      <td style={{ padding: "10px 10px", color: "var(--app-muted,#64748b)", fontSize: "12px", whiteSpace: "nowrap" }}>
+                        {p.updatedAt ? new Date(p.updatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—"}
+                      </td>
+                      <td style={{ padding: "10px 10px", fontWeight: 600 }}>{p.student?.name || "—"}</td>
+                      <td style={{ padding: "10px 10px", color: "var(--app-muted,#64748b)" }}>{p.student?.className || "—"}</td>
+                      <td style={{ padding: "10px 10px", textTransform: "capitalize" }}>{p.feeType}</td>
+                      <td style={{ padding: "10px 10px", fontWeight: 700, color: "var(--app-success,#059669)" }}>{money.format(p.paidAmount || 0)}</td>
+                      <td style={{ padding: "10px 10px", fontWeight: (p.dueAmount || 0) > 0 ? 700 : 400, color: (p.dueAmount || 0) > 0 ? "var(--app-danger,#dc2626)" : "var(--app-muted,#64748b)" }}>
+                        {money.format(p.dueAmount || 0)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        )}
+      </div>
+    );
+  };
+
   const renderDashboard = () => {
+    // ── Cashier role — dedicated payment UI ─────────────────────────────────
+    if (user.role === "cashier") return renderCashierDashboard();
+
     // ── Student personal dashboard ───────────────────────────────────────────
     if (user.role === "student") {
       const myId = currentStudent?._id ? String(currentStudent._id) : null;
@@ -2466,12 +3049,21 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
       cardsByClass.get(cls).push(card);
     });
 
-    // For teacher role, filter to only their assigned section's class
+    // For teacher role, filter to only their assigned/allowed classes
     const teacherSectionClasses = user.role === "teacher"
-      ? new Set(data.sections.filter((s) => {
-          const tid = s.classTeacher?._id || s.classTeacher;
-          return String(tid) === String(user._id || user.id);
-        }).map((s) => s.className))
+      ? (() => {
+          // 1) allowedClasses from employee profile (admin-assigned multi-class access)
+          const empRecord = data.employees.find((e) => String(e.contactInfo?.email || "").toLowerCase() === String(user.email || "").toLowerCase());
+          if (empRecord?.allowedClasses?.length) return new Set(empRecord.allowedClasses);
+          // 2) Sections where teacher is classTeacher
+          const sectionClasses = data.sections
+            .filter((s) => { const tid = s.classTeacher?._id || s.classTeacher; return String(tid) === String(user._id || user.id); })
+            .map((s) => s.className);
+          if (sectionClasses.length) return new Set(sectionClasses);
+          // 3) Legacy single assignedClass
+          if (empRecord?.assignedClass) return new Set([empRecord.assignedClass]);
+          return new Set();
+        })()
       : null;
 
     const classKeys = [...new Set([...studentsByClass.keys(), ...cardsByClass.keys()])]
@@ -2537,7 +3129,10 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
                   <h3 style={{margin:0}}>{cls}</h3>
                   <p style={{margin:"2px 0 0",fontSize:"13px",color:"var(--edu-muted)"}}>{students.length} student{students.length !== 1 ? "s" : ""}{classSections.length > 0 ? ` • Sections: ${classSections.map((s) => s.sectionName).join(", ")}` : ""}</p>
                 </div>
-                {teacherAllowed && <button className="btn soft" type="button" onClick={() => { setForm({ ...emptyForms.mark, student: "" }); openModal("mark"); }}>Enter Marks</button>}
+                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                  {teacherAllowed && <button className="btn soft" type="button" onClick={() => { setForm({ ...emptyForms.mark, student: "" }); openModal("mark"); }}>Enter Marks</button>}
+                  <button className="btn soft" type="button" onClick={() => setActiveView("resultCards")} title="View printable result cards">Result Cards</button>
+                </div>
               </div>
 
               {examStats.length > 0 && (
@@ -2552,22 +3147,83 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
                 </div>
               )}
 
-              {students.length > 0 ? (
-                <div className="overflow-x-auto">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Student</th>
-                        <th>Roll</th>
-                        {exams.slice(0, 4).map((ex) => <th key={ex}>{ex}</th>)}
-                        <th>Status</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {students.map((s) => {
-                        const sCards = cards.filter((c) => (c.studentId === s._id) || (c.student?._id === s._id));
-                        return (
-                          <tr key={s._id}>
+              {students.length > 0 ? (() => {
+                // Rank students by total obtained / total max across ALL marks
+                const ranked = students.map((s) => {
+                  const sCards = cards.filter((c) => (c.studentId === s._id) || (c.student?._id === s._id));
+                  const sMarks = data.marks.filter((m) => String(m.student?._id || m.student) === String(s._id));
+                  const totalObtained = sMarks.reduce((sum, m) => sum + Number(m.obtainedMarks || 0), 0);
+                  const totalMax = sMarks.reduce((sum, m) => sum + Number(m.totalMarks || 100), 0);
+                  const totalPct = totalMax > 0 ? (totalObtained / totalMax * 100) : null;
+                  const allPass = sCards.length > 0 && sCards.every((c) => c.resultStatus === "Pass");
+                  return { s, sCards, totalObtained, totalMax, totalPct, allPass };
+                });
+                // Sort: students with marks first (by pct desc), then students without marks
+                ranked.sort((a, b) => {
+                  if (a.totalPct === null && b.totalPct === null) return 0;
+                  if (a.totalPct === null) return 1;
+                  if (b.totalPct === null) return -1;
+                  return b.totalPct - a.totalPct;
+                });
+                // Assign rank (ties share rank)
+                let rankCounter = 0;
+                let prevPct = null;
+                let prevRank = 0;
+                const withRank = ranked.map(({ s, sCards, totalObtained, totalMax, totalPct, allPass }) => {
+                  let rank = null;
+                  if (totalPct !== null) {
+                    rankCounter++;
+                    if (totalPct !== prevPct) { prevRank = rankCounter; prevPct = totalPct; }
+                    rank = prevRank;
+                  }
+                  return { s, sCards, totalObtained, totalMax, totalPct, allPass, rank };
+                });
+                const rankLabel = (r) => {
+                  if (r === null) return "—";
+                  const sfx = ["th","st","nd","rd"];
+                  const v = r % 100;
+                  return r + (sfx[(v - 20) % 10] || sfx[v] || sfx[0]);
+                };
+                const rankStyle = (r) => {
+                  if (r === 1) return { color: "#b45309", fontWeight: 800 };
+                  if (r === 2) return { color: "#6b7280", fontWeight: 700 };
+                  if (r === 3) return { color: "#92400e", fontWeight: 700 };
+                  return { fontWeight: 600 };
+                };
+                return (
+                  <div className="overflow-x-auto">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th style={{width:46}}>Rank</th>
+                          <th>Student</th>
+                          <th>Roll</th>
+                          {exams.slice(0, 4).map((ex) => <th key={ex}>{ex}</th>)}
+                          <th>Total %</th>
+                          <th>Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {withRank.map(({ s, sCards, totalObtained, totalMax, totalPct, allPass, rank }) => (
+                          <tr key={s._id} style={rank === 1 ? { background: "color-mix(in srgb,#fbbf24 8%,transparent)" } : rank === 2 ? { background: "color-mix(in srgb,#94a3b8 6%,transparent)" } : {}}>
+                            <td style={{ textAlign: "center" }}>
+                              {rank <= 3 ? (
+                                <span style={{
+                                  display: "inline-block",
+                                  padding: "2px 8px",
+                                  borderRadius: "999px",
+                                  fontSize: "11.5px",
+                                  fontWeight: 900,
+                                  background: rank === 1 ? "linear-gradient(135deg,#fbbf24,#f59e0b)" : rank === 2 ? "linear-gradient(135deg,#94a3b8,#64748b)" : "linear-gradient(135deg,#cd7c54,#b45309)",
+                                  color: "#fff",
+                                  letterSpacing: "0.02em",
+                                }}>
+                                  {rankLabel(rank)}
+                                </span>
+                              ) : (
+                                <span style={rankStyle(rank)}>{rankLabel(rank)}</span>
+                              )}
+                            </td>
                             <td><strong>{s.name}</strong></td>
                             <td>{s.rollNumber || "—"}</td>
                             {exams.slice(0, 4).map((ex) => {
@@ -2583,19 +3239,25 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
                               );
                             })}
                             <td>
+                              {totalPct !== null ? (
+                                <strong style={rankStyle(rank)}>{totalPct.toFixed(1)}%</strong>
+                              ) : <span style={{color:"var(--edu-muted)"}}>—</span>}
+                              {totalMax > 0 && <small style={{display:"block",color:"var(--edu-muted)",fontSize:"11px"}}>{totalObtained}/{totalMax}</small>}
+                            </td>
+                            <td>
                               {sCards.length > 0 ? (
-                                sCards.every((c) => c.resultStatus === "Pass")
+                                allPass
                                   ? <span className="status dot-status active">Pass</span>
                                   : <span className="status dot-status inactive">Fail</span>
                               ) : <span style={{color:"var(--edu-muted)"}}>No marks</span>}
                             </td>
                           </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                );
+              })() : (
                 <p style={{padding:"14px",color:"var(--edu-muted)",fontSize:"14px"}}>No students in this class yet.</p>
               )}
             </div>
@@ -3662,9 +4324,9 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
                             View
                           </button>
                         )}
-                        <button className="btn danger" style={{ fontSize: "11.5px", padding: "3px 8px" }}
+                        <button className="btn danger" style={{ fontSize: "11.5px", padding: "4px 8px", display: "inline-flex", alignItems: "center" }}
                           onClick={() => handleDeleteLeave(l._id)}>
-                          ×
+                          <DashboardIcon name="delete" className="chip-icon" />
                         </button>
                       </div>
                     </td>
@@ -3844,8 +4506,8 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
           title={`Year ${calendarYear}`}
           action={
             <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-              <button className="btn soft" type="button" onClick={() => setCalendarYear((y) => y - 1)}>← {calendarYear - 1}</button>
-              <button className="btn soft" type="button" onClick={() => setCalendarYear((y) => y + 1)}>{calendarYear + 1} →</button>
+              <button className="btn soft" type="button" onClick={() => setCalendarYear((y) => y - 1)} style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}><DashboardIcon name="chevronLeft" className="chip-icon" /> {calendarYear - 1}</button>
+              <button className="btn soft" type="button" onClick={() => setCalendarYear((y) => y + 1)} style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>{calendarYear + 1} <DashboardIcon name="chevronRight" className="chip-icon" /></button>
             </div>
           }
         />
@@ -4003,6 +4665,36 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
             </button>
           </article>
         )}
+        {isAdmin && (
+          <article className="settings-card panel">
+            <span className="settings-icon" style={{ background: "linear-gradient(135deg,#0ea5e9,#2563eb)", color: "#fff" }}><DashboardIcon name="shield" /></span>
+            <h3>Role Management</h3>
+            <p>View permissions by role and change user roles.</p>
+            <button className="btn soft" type="button" onClick={() => setRoleMgmtOpen((v) => !v)}>
+              {roleMgmtOpen ? "Close Panel" : "Manage Roles"}
+            </button>
+          </article>
+        )}
+        {isAdmin && (
+          <article className="settings-card panel">
+            <span className="settings-icon" style={{ background: "linear-gradient(135deg,#10b981,#059669)", color: "#fff" }}><DashboardIcon name="users" /></span>
+            <h3>Teacher Class Access</h3>
+            <p>Assign which classes each teacher can view and enter marks for.</p>
+            <button className="btn soft" type="button" onClick={() => setTeacherAccessOpen((v) => !v)}>
+              {teacherAccessOpen ? "Close Panel" : "Manage Access"}
+            </button>
+          </article>
+        )}
+        {isAdmin && (
+          <article className="settings-card panel">
+            <span className="settings-icon" style={{ background: "linear-gradient(135deg,#f59e0b,#d97706)", color: "#fff" }}><DashboardIcon name="marks" /></span>
+            <h3>Subject Management</h3>
+            <p>Define which subjects are taught in each class.</p>
+            <button className="btn soft" type="button" onClick={() => { setSubjectMgmtOpen((v) => !v); setSubjectMgmtDraft(data.schoolSettings?.classSubjectsConfig || {}); }}>
+              {subjectMgmtOpen ? "Close Panel" : "Manage Subjects"}
+            </button>
+          </article>
+        )}
       </section>
 
       {/* ── User Management Panel — admin only ────────────────────── */}
@@ -4140,6 +4832,331 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
           </div>
         </section>
       )}
+
+      {/* ── Role Management Panel ── */}
+      {isAdmin && roleMgmtOpen && (() => {
+        // perm level: "full"|"view"|"class"|"own"|"write"|"none"
+        const ROLE_DEFS = [
+          { role: "admin",      label: "Admin",      students:"full",  marks:"full",  fees:"full",  salary:"full",  employees:"full",  settings:"full",  attendance:"full"  },
+          { role: "accounts",   label: "Accounts",   students:"view",  marks:"view",  fees:"full",  salary:"full",  employees:"view",  settings:"none",  attendance:"full"  },
+          { role: "accountant", label: "Accountant", students:"view",  marks:"view",  fees:"full",  salary:"full",  employees:"view",  settings:"none",  attendance:"full"  },
+          { role: "cashier",    label: "Cashier",    students:"view",  marks:"view",  fees:"write", salary:"none",  employees:"none",  settings:"none",  attendance:"none"  },
+          { role: "teacher",    label: "Teacher",    students:"class", marks:"class", fees:"none",  salary:"own",   employees:"none",  settings:"none",  attendance:"none"  },
+          { role: "staff",      label: "Staff",      students:"view",  marks:"view",  fees:"own",   salary:"own",   employees:"none",  settings:"none",  attendance:"full"  },
+          { role: "audit",      label: "Audit",      students:"view",  marks:"view",  fees:"view",  salary:"view",  employees:"view",  settings:"none",  attendance:"view"  },
+          { role: "student",    label: "Student",    students:"own",   marks:"own",   fees:"own",   salary:"none",  employees:"none",  settings:"none",  attendance:"none"  },
+        ];
+        const permBadge = (level) => {
+          const map = {
+            full:  { label: "Full",  bg: "rgba(5,150,105,0.11)",   color: "#059669" },
+            write: { label: "Write", bg: "rgba(37,99,235,0.11)",   color: "#1d4ed8" },
+            view:  { label: "View",  bg: "rgba(37,99,235,0.08)",   color: "#2563eb" },
+            class: { label: "Class", bg: "rgba(124,58,237,0.09)",  color: "#7c3aed" },
+            own:   { label: "Own",   bg: "rgba(217,119,6,0.09)",   color: "#b45309" },
+            none:  { label: "—",     bg: "transparent",             color: "#94a3b8" },
+          };
+          const { label, bg, color } = map[level] || map.none;
+          return (
+            <span style={{ background: bg, color, padding: "2px 9px", borderRadius: 6, fontSize: 11.5, fontWeight: 700 }}>
+              {label}
+            </span>
+          );
+        };
+        const cols = ["students","marks","fees","salary","employees","settings","attendance"];
+        const colLabels = { students:"Students", marks:"Marks", fees:"Fees", salary:"Salary", employees:"Employees", settings:"Settings", attendance:"Attendance" };
+        return (
+          <section className="panel" style={{ padding: 0, overflow: "hidden" }}>
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:16, padding:"18px 22px", borderBottom:"1px solid var(--ui-line,#e2e8f0)" }}>
+              <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+                <span className="settings-icon" style={{ background:"linear-gradient(135deg,#0ea5e9,#2563eb)", color:"#fff" }}><DashboardIcon name="shield" /></span>
+                <div>
+                  <h3 style={{ margin:0, fontSize:16, fontWeight:700 }}>Role Management</h3>
+                  <p style={{ margin:"2px 0 0", fontSize:13, color:"var(--ui-muted,#64748b)" }}>Permissions per role · Change user roles below</p>
+                </div>
+              </div>
+              <button className="btn soft" type="button" style={{ fontSize:12 }} onClick={() => setRoleMgmtOpen(false)}>Close</button>
+            </div>
+
+            {/* Permissions matrix */}
+            <div style={{ overflowX:"auto", WebkitOverflowScrolling:"touch" }}>
+              <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12.5, minWidth:680 }}>
+                <thead>
+                  <tr style={{ borderBottom:"1px solid var(--ui-line,#e2e8f0)" }}>
+                    <th style={{ padding:"9px 14px", textAlign:"left", fontWeight:700, color:"var(--ui-muted,#64748b)", fontSize:11, textTransform:"uppercase", letterSpacing:"0.08em" }}>Role</th>
+                    {cols.map((c) => <th key={c} style={{ padding:"9px 10px", textAlign:"center", fontWeight:700, color:"var(--ui-muted,#64748b)", fontSize:11, textTransform:"uppercase", letterSpacing:"0.08em", whiteSpace:"nowrap" }}>{colLabels[c]}</th>)}
+                  </tr>
+                </thead>
+                <tbody>
+                  {ROLE_DEFS.map((rd) => (
+                    <tr key={rd.role} style={{ borderBottom:"1px solid var(--ui-line,#f1f5f9)" }}>
+                      <td style={{ padding:"10px 14px", fontWeight:700, whiteSpace:"nowrap" }}>
+                        <span style={{ padding:"3px 10px", borderRadius:999, fontSize:12, fontWeight:700, background:"rgba(99,102,241,0.08)", color:"#4f46e5", border:"1px solid rgba(99,102,241,0.2)" }}>{rd.label}</span>
+                      </td>
+                      {cols.map((c) => (
+                        <td key={c} style={{ padding:"10px 10px", textAlign:"center" }}>{permBadge(rd[c])}</td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Change user role */}
+            <div style={{ padding:"14px 22px", borderTop:"1px solid var(--ui-line,#e2e8f0)" }}>
+              <p style={{ margin:"0 0 10px", fontWeight:700, fontSize:13 }}>Change User Role</p>
+              <div style={{ overflowX:"auto" }}>
+                <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13, minWidth:520 }}>
+                  <thead>
+                    <tr style={{ borderBottom:"1px solid var(--ui-line,#e2e8f0)" }}>
+                      {["Name","Email","Current Role","Change To","Action"].map((h) => (
+                        <th key={h} style={{ padding:"8px 12px", textAlign:"left", fontWeight:700, color:"var(--ui-muted,#64748b)", fontSize:11, textTransform:"uppercase", letterSpacing:"0.07em", whiteSpace:"nowrap" }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {allUsers.map((u) => {
+                      const accountKey = `role-${u._id}`;
+                      const draftRole = userAccountDrafts[accountKey]?.role ?? u.role ?? "student";
+                      return (
+                        <tr key={u._id} style={{ borderBottom:"1px solid var(--ui-line,#f1f5f9)" }}>
+                          <td style={{ padding:"9px 12px", fontWeight:600, whiteSpace:"nowrap" }}>{u.name}</td>
+                          <td style={{ padding:"9px 12px", color:"var(--ui-muted,#64748b)", fontSize:12 }}>{u.email}</td>
+                          <td style={{ padding:"9px 12px", whiteSpace:"nowrap" }}>
+                            <span style={{ padding:"2px 10px", borderRadius:999, fontSize:11.5, fontWeight:700, background:"rgba(99,102,241,0.08)", color:"#4f46e5", border:"1px solid rgba(99,102,241,0.2)" }}>{u.role}</span>
+                          </td>
+                          <td style={{ padding:"9px 12px", minWidth:150 }}>
+                            <select className="control" style={{ height:34, fontSize:13 }}
+                              value={draftRole}
+                              onChange={(e) => setUserAccountDrafts((prev) => ({ ...prev, [accountKey]: { ...prev[accountKey], role: e.target.value } }))}>
+                              {["admin","teacher","accounts","accountant","cashier","staff","audit","student"].map((r) => <option key={r} value={r}>{r}</option>)}
+                            </select>
+                          </td>
+                          <td style={{ padding:"9px 12px", whiteSpace:"nowrap" }}>
+                            <button
+                              type="button"
+                              className="btn primary"
+                              style={{ fontSize:12, padding:"5px 12px", minHeight:32 }}
+                              disabled={roleChangeSaving[u._id] || draftRole === u.role}
+                              onClick={async () => {
+                                if (draftRole === u.role) return;
+                                setRoleChangeSaving((p) => ({ ...p, [u._id]: true }));
+                                try {
+                                  await erpApi.updateUser(token, u._id, { name: u.name, email: u.email, role: draftRole });
+                                  setAllUsers((prev) => prev.map((uu) => uu._id === u._id ? { ...uu, role: draftRole } : uu));
+                                  showDoneAlert(`${u.name} role changed to ${draftRole}.`);
+                                } catch (err) { setError(getErrorMessage(err)); }
+                                finally { setRoleChangeSaving((p) => ({ ...p, [u._id]: false })); }
+                              }}>
+                              {roleChangeSaving[u._id] ? "Saving…" : "Change Role"}
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+        );
+      })()}
+
+      {/* ── Teacher Class Access Panel ── */}
+      {isAdmin && teacherAccessOpen && (() => {
+        const teachers = data.employees.filter((e) => e.role === "teacher");
+        const allClasses = [...new Set(data.students.map((s) => s.className).filter(Boolean))].sort();
+        return (
+          <section className="panel" style={{ padding:0, overflow:"hidden" }}>
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:16, padding:"18px 22px", borderBottom:"1px solid var(--ui-line,#e2e8f0)" }}>
+              <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+                <span className="settings-icon" style={{ background:"linear-gradient(135deg,#10b981,#059669)", color:"#fff" }}><DashboardIcon name="users" /></span>
+                <div>
+                  <h3 style={{ margin:0, fontSize:16, fontWeight:700 }}>Teacher Class Access</h3>
+                  <p style={{ margin:"2px 0 0", fontSize:13, color:"var(--ui-muted,#64748b)" }}>Select which classes each teacher can view and enter marks for</p>
+                </div>
+              </div>
+              <button className="btn soft" type="button" style={{ fontSize:12 }} onClick={() => setTeacherAccessOpen(false)}>Close</button>
+            </div>
+            <div style={{ overflowX:"auto", WebkitOverflowScrolling:"touch" }}>
+              <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13, minWidth:Math.max(600, 200 + allClasses.length * 80) }}>
+                <thead>
+                  <tr style={{ borderBottom:"1px solid var(--ui-line,#e2e8f0)" }}>
+                    <th style={{ padding:"9px 14px", textAlign:"left", fontWeight:700, color:"var(--ui-muted,#64748b)", fontSize:11, textTransform:"uppercase", letterSpacing:"0.07em", minWidth:160 }}>Teacher</th>
+                    {allClasses.map((cls) => (
+                      <th key={cls} style={{ padding:"9px 8px", textAlign:"center", fontWeight:700, color:"var(--ui-muted,#64748b)", fontSize:10, textTransform:"uppercase", letterSpacing:"0.05em", whiteSpace:"nowrap", minWidth:72 }}>{cls}</th>
+                    ))}
+                    <th style={{ padding:"9px 14px", textAlign:"center", fontWeight:700, color:"var(--ui-muted,#64748b)", fontSize:11, textTransform:"uppercase", letterSpacing:"0.07em", whiteSpace:"nowrap" }}>Save</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {teachers.map((emp) => {
+                    const currentAllowed = Array.isArray(emp.allowedClasses) ? new Set(emp.allowedClasses) : (emp.assignedClass ? new Set([emp.assignedClass]) : new Set());
+                    const draftKey = `ta-${emp._id}`;
+                    const draftSet = userAccountDrafts[draftKey]?.allowedClasses
+                      ? new Set(userAccountDrafts[draftKey].allowedClasses)
+                      : currentAllowed;
+
+                    const toggleClass = (cls) => {
+                      const next = new Set(draftSet);
+                      if (next.has(cls)) { next.delete(cls); } else { next.add(cls); }
+                      setUserAccountDrafts((prev) => ({ ...prev, [draftKey]: { allowedClasses: [...next] } }));
+                    };
+
+                    return (
+                      <tr key={emp._id} style={{ borderBottom:"1px solid var(--ui-line,#f1f5f9)" }}>
+                        <td style={{ padding:"10px 14px", fontWeight:600, whiteSpace:"nowrap" }}>
+                          <div>{emp.name}</div>
+                          {emp.assignedClass && <small style={{ color:"var(--ui-muted,#64748b)", fontSize:11 }}>Primary: {emp.assignedClass}</small>}
+                        </td>
+                        {allClasses.map((cls) => (
+                          <td key={cls} style={{ padding:"8px", textAlign:"center" }}>
+                            <input
+                              type="checkbox"
+                              checked={draftSet.has(cls)}
+                              onChange={() => toggleClass(cls)}
+                              style={{ width:16, height:16, cursor:"pointer", accentColor:"#2563eb" }}
+                            />
+                          </td>
+                        ))}
+                        <td style={{ padding:"10px 14px", textAlign:"center" }}>
+                          <button
+                            type="button"
+                            className="btn primary"
+                            style={{ fontSize:11.5, padding:"4px 12px", minHeight:30 }}
+                            disabled={teacherAccessSaving[emp._id]}
+                            onClick={async () => {
+                              const newAllowed = userAccountDrafts[draftKey]?.allowedClasses ?? [...currentAllowed];
+                              setTeacherAccessSaving((p) => ({ ...p, [emp._id]: true }));
+                              try {
+                                await erpApi.updateEmployee(token, emp._id, {
+                                  ...emp,
+                                  phone: emp.contactInfo?.phone || "",
+                                  email: emp.contactInfo?.email || "",
+                                  address: emp.contactInfo?.address || "",
+                                  allowedClasses: newAllowed,
+                                });
+                                const partial = await refreshPartialData(token, ["employees"]);
+                                setData((prev) => ({ ...prev, ...partial }));
+                                showDoneAlert(`Access updated for ${emp.name}.`);
+                              } catch (err) { setError(getErrorMessage(err)); }
+                              finally { setTeacherAccessSaving((p) => ({ ...p, [emp._id]: false })); }
+                            }}>
+                            {teacherAccessSaving[emp._id] ? "…" : "Save"}
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {teachers.length === 0 && (
+                    <tr><td colSpan={allClasses.length + 2} style={{ padding:"16px 14px", color:"var(--ui-muted,#64748b)", fontSize:13 }}>No teachers found. Add employees with role "teacher" first.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        );
+      })()}
+
+      {/* ── Subject Management Panel ── */}
+      {isAdmin && subjectMgmtOpen && (() => {
+        const allClasses = [...new Set([
+          ...data.students.map((s) => s.className),
+          ...academicClassOptions.map((c) => c.className),
+        ].filter(Boolean))].sort((a, b) => {
+          const idx = new Map(academicClassOptions.map((c, i) => [c.className, i]));
+          return (idx.get(a) ?? 999) - (idx.get(b) ?? 999);
+        });
+        const currentSubjects = subjectMgmtClass
+          ? (subjectMgmtDraft[subjectMgmtClass] ?? subjectsForClass(subjectMgmtClass, subjectMgmtDraft))
+          : [];
+        const defaultSubjects = subjectsForClass(subjectMgmtClass);
+
+        return (
+          <section className="panel" style={{ padding:0, overflow:"hidden" }}>
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:16, padding:"18px 22px", borderBottom:"1px solid var(--ui-line,#e2e8f0)", flexWrap:"wrap" }}>
+              <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+                <span className="settings-icon" style={{ background:"linear-gradient(135deg,#f59e0b,#d97706)", color:"#fff" }}><DashboardIcon name="marks" /></span>
+                <div>
+                  <h3 style={{ margin:0, fontSize:16, fontWeight:700 }}>Subject Management</h3>
+                  <p style={{ margin:"2px 0 0", fontSize:13, color:"var(--ui-muted,#64748b)" }}>Define subjects for each class — teachers will see these when entering marks</p>
+                </div>
+              </div>
+              <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+                <select className="control" style={{ height:36, fontSize:13, minWidth:160 }} value={subjectMgmtClass}
+                  onChange={(e) => setSubjectMgmtClass(e.target.value)}>
+                  <option value="">— Select Class —</option>
+                  {allClasses.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+                <button className="btn soft" type="button" style={{ fontSize:12 }} onClick={() => setSubjectMgmtOpen(false)}>Close</button>
+              </div>
+            </div>
+
+            {subjectMgmtClass ? (
+              <div style={{ padding:"18px 22px" }}>
+                <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:10, marginBottom:14 }}>
+                  <div>
+                    <p style={{ margin:0, fontWeight:700, fontSize:14 }}>Subjects for {subjectMgmtClass}</p>
+                    <p style={{ margin:"2px 0 0", fontSize:12, color:"var(--ui-muted,#64748b)" }}>Check subjects to include. Uncheck to remove. Unchecked defaults come from the built-in catalog.</p>
+                  </div>
+                  <div style={{ display:"flex", gap:8 }}>
+                    <button type="button" className="btn soft" style={{ fontSize:12 }}
+                      onClick={() => setSubjectMgmtDraft((prev) => ({ ...prev, [subjectMgmtClass]: [...defaultSubjects] }))}>
+                      Reset to Default
+                    </button>
+                    <button type="button" className="btn success" style={{ fontSize:12 }}
+                      disabled={subjectMgmtSaving}
+                      onClick={async () => {
+                        setSubjectMgmtSaving(true);
+                        try {
+                          const res = await erpApi.updateSchoolSettings(token, { classSubjectsConfig: subjectMgmtDraft });
+                          setData((prev) => ({ ...prev, schoolSettings: { ...prev.schoolSettings, classSubjectsConfig: res.data.settings.classSubjectsConfig } }));
+                          showDoneAlert("Class subjects saved.");
+                        } catch (err) { setError(getErrorMessage(err)); }
+                        finally { setSubjectMgmtSaving(false); }
+                      }}>
+                      {subjectMgmtSaving ? "Saving…" : "Save Subjects"}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Existing subjects list */}
+                <div style={{ display:"flex", flexWrap:"wrap", gap:8, marginBottom:14 }}>
+                  {(subjectMgmtDraft[subjectMgmtClass] ?? defaultSubjects).map((subj) => (
+                    <div key={subj} style={{ display:"flex", alignItems:"center", gap:4, padding:"5px 12px", borderRadius:999, background:"color-mix(in srgb,var(--app-primary,#2563eb) 10%,var(--app-surface,#fff))", border:"1px solid color-mix(in srgb,var(--app-primary,#2563eb) 30%,transparent)", fontSize:12.5, fontWeight:600 }}>
+                      <span>{subj}</span>
+                      <button type="button"
+                        style={{ border:"none", background:"none", cursor:"pointer", fontSize:14, lineHeight:1, color:"#dc2626", padding:"0 0 0 4px" }}
+                        onClick={() => setSubjectMgmtDraft((prev) => ({ ...prev, [subjectMgmtClass]: (prev[subjectMgmtClass] ?? defaultSubjects).filter((s) => s !== subj) }))}>
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Add custom subject */}
+                <form onSubmit={(e) => {
+                  e.preventDefault();
+                  const input = e.target.elements.newSubject;
+                  const val = input.value.trim();
+                  if (!val) return;
+                  const existing = subjectMgmtDraft[subjectMgmtClass] ?? defaultSubjects;
+                  if (existing.includes(val)) return;
+                  setSubjectMgmtDraft((prev) => ({ ...prev, [subjectMgmtClass]: [...existing, val] }));
+                  input.value = "";
+                }}>
+                  <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+                    <input name="newSubject" className="control" style={{ maxWidth:260 }} placeholder="Add a subject…" list="all-subjects-list" />
+                    <datalist id="all-subjects-list">{allSubjectOptions.map((s) => <option key={s} value={s} />)}</datalist>
+                    <button type="submit" className="btn primary" style={{ fontSize:13, minHeight:38 }}>+ Add</button>
+                  </div>
+                </form>
+              </div>
+            ) : (
+              <p style={{ padding:"20px 22px", color:"var(--ui-muted,#64748b)", fontSize:13 }}>Select a class to manage its subjects.</p>
+            )}
+          </section>
+        );
+      })()}
 
       {/* Database Configuration — admin only */}
       {isAdmin && (
@@ -4414,7 +5431,7 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
   const selectedProfileMarks = useMemo(() => profileStudent ? data.marks.filter((mark) => (mark.student?._id || mark.student) === profileStudent._id) : [], [profileStudent, data.marks]);
   const selectedProfileResults = useMemo(() => profileStudent ? data.markResults.filter((result) => (result.student?._id || result.student) === profileStudent._id) : [], [profileStudent, data.markResults]);
   const selectedMarkStudent = data.students.find((student) => student._id === form.student);
-  const subjectOptionsForForm = modal === "mark" && selectedMarkStudent ? subjectsForClass(selectedMarkStudent.className) : allSubjectOptions;
+  const subjectOptionsForForm = modal === "mark" && selectedMarkStudent ? subjectsForClass(selectedMarkStudent.className, data.schoolSettings?.classSubjectsConfig) : allSubjectOptions;
 
   // For teacher role, filter mark-entry students to only their section's class
   const markEntryStudentsBase = useMemo(() => {
@@ -4444,6 +5461,32 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
   const selectedSalaryEmployee = modal === "salary" ? data.employees.find((item) => item._id === form.employee) : null;
   const studentFeeAutoPreview = modal === "payment" ? getStudentFeeAutoValues(form.student, form.feeType, form.billingMonth, form.term) : null;
   const studentFeeDuePreview = modal === "payment" ? Math.max(Number(form.amount || studentFeeAutoPreview?.amount || 0) - Number(form.paidAmount || 0), 0) : 0;
+  // Smart student picker computed values
+  const selectedPayStudent = useMemo(
+    () => (modal === "payment" && form.student ? data.students.find((s) => s._id === form.student) : null),
+    [modal, form.student, data.students],
+  );
+  const payStudentResults = useMemo(() => {
+    if (modal !== "payment" || payStudentSearch.trim().length < 1) return [];
+    const q = payStudentSearch.toLowerCase().trim();
+    return data.students.filter((s) =>
+      s.name?.toLowerCase().includes(q) ||
+      String(s.rollNumber || "").toLowerCase().includes(q) ||
+      s.className?.toLowerCase().includes(q) ||
+      String(s._id || "").toLowerCase().includes(q) ||
+      (s.section || "").toLowerCase().includes(q),
+    ).slice(0, 14);
+  }, [modal, payStudentSearch, data.students]);
+  const payBrowseStudents = useMemo(() => {
+    if (modal !== "payment") return [];
+    return data.students
+      .filter((s) => {
+        if (payStudentClass && s.className !== payStudentClass) return false;
+        if (payStudentSection && s.section !== payStudentSection) return false;
+        return true;
+      })
+      .sort((a, b) => Number(a.rollNumber || 0) - Number(b.rollNumber || 0));
+  }, [modal, payStudentClass, payStudentSection, data.students]);
 
   const EXPENSE_CATS = {
     asset: "Asset Purchase",
@@ -5073,13 +6116,13 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
           { key: "results", label: `Results (${selectedProfileResults.length})` },
         ];
         const infoChips = [
-          { icon: "👤", label: "Guardian", value: profileStudent.contactInfo?.guardianName || profileStudent.guardianName || "—" },
-          { icon: "📞", label: "Phone", value: profileStudent.contactInfo?.phone || profileStudent.phone || "—" },
-          { icon: "✉️", label: "Email", value: profileStudent.contactInfo?.email || profileStudent.email || "—" },
-          { icon: "🎂", label: "Date of Birth", value: profileStudent.dateOfBirth ? toDateInput(profileStudent.dateOfBirth) : "—" },
-          { icon: "📅", label: "Admitted", value: profileStudent.admissionDate ? toDateInput(profileStudent.admissionDate) : "—" },
-          { icon: "🚻", label: "Gender", value: profileStudent.gender ? String(profileStudent.gender).charAt(0).toUpperCase() + String(profileStudent.gender).slice(1) : "—" },
-          { icon: "📍", label: "Address", value: profileStudent.contactInfo?.address || profileStudent.address || "—", wide: true },
+          { icon: "profile", label: "Guardian",     value: profileStudent.contactInfo?.guardianName || profileStudent.guardianName || "—" },
+          { icon: "phone",   label: "Phone",        value: profileStudent.contactInfo?.phone || profileStudent.phone || "—" },
+          { icon: "mail",    label: "Email",        value: profileStudent.contactInfo?.email || profileStudent.email || "—" },
+          { icon: "calendar",label: "Date of Birth",value: profileStudent.dateOfBirth ? toDateInput(profileStudent.dateOfBirth) : "—" },
+          { icon: "calendar",label: "Admitted",     value: profileStudent.admissionDate ? toDateInput(profileStudent.admissionDate) : "—" },
+          { icon: "profile", label: "Gender",       value: profileStudent.gender ? String(profileStudent.gender).charAt(0).toUpperCase() + String(profileStudent.gender).slice(1) : "—" },
+          { icon: "mapPin",  label: "Address",      value: profileStudent.contactInfo?.address || profileStudent.address || "—", wide: true },
         ];
         return (
           <Modal title="" onClose={() => { setProfileStudent(null); setProfileTab("overview"); }}>
@@ -5143,19 +6186,16 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
                   <span className="profile-due-amount">{money.format(totalDue)}</span>
                 </div>
               )}
-              {totalDue > Number.MAX_SAFE_INTEGER && (
-                <div style={{ marginTop: "14px", padding: "9px 14px", borderRadius: "10px", background: "rgba(254,202,202,0.2)", border: "1px solid rgba(255,255,255,0.25)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px" }}>
-                  <span style={{ color: "#fff", fontSize: "13px", fontWeight: 600 }}>⚠️ Outstanding Dues</span>
-                  <span style={{ color: "#fff", fontSize: "15px", fontWeight: 800 }}>{money.format(totalDue)}</span>
-                </div>
-              )}
             </div>
 
             {/* Info chips grid */}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: "10px", padding: "18px 0 4px" }}>
               {infoChips.map((chip) => (
                 <div key={chip.label} style={{ gridColumn: chip.wide ? "1 / -1" : undefined, background: "var(--app-surface-2,#f8fafc)", border: "1px solid var(--app-border,#e2e8f0)", borderRadius: "10px", padding: "10px 14px", display: "flex", flexDirection: "column", gap: "2px" }}>
-                  <span style={{ fontSize: "10.5px", fontWeight: 600, color: "var(--app-muted,#64748b)", textTransform: "uppercase", letterSpacing: "0.07em" }}>{chip.icon} {chip.label}</span>
+                  <span style={{ fontSize: "10.5px", fontWeight: 600, color: "var(--app-muted,#64748b)", textTransform: "uppercase", letterSpacing: "0.07em", display: "flex", alignItems: "center", gap: "4px" }}>
+                    <span style={{ width: 12, height: 12, display: "inline-flex", alignItems: "center", flexShrink: 0, opacity: 0.65 }}><DashboardIcon name={chip.icon} className="chip-icon" /></span>
+                    {chip.label}
+                  </span>
                   <span style={{ fontSize: "13px", fontWeight: 500, color: "var(--app-text,#1e293b)", wordBreak: "break-word" }}>{chip.value}</span>
                 </div>
               ))}
@@ -5243,8 +6283,8 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
                             </div>
                           </div>
                           <div style={{ textAlign: "right", whiteSpace: "nowrap" }}>
-                            <p style={{ margin: 0, fontSize: "13px", fontWeight: 700, color: "var(--app-success,#059669)" }}>✓ {money.format(pay.paidAmount || 0)}</p>
-                            {(pay.dueAmount || 0) > 0 && <p style={{ margin: "2px 0 0", fontSize: "12px", color: "var(--app-danger,#dc2626)", fontWeight: 600 }}>⚠ {money.format(pay.dueAmount)}</p>}
+                            <p style={{ margin: 0, fontSize: "13px", fontWeight: 700, color: "var(--app-success,#059669)", display: "flex", alignItems: "center", gap: "3px", justifyContent: "flex-end" }}><DashboardIcon name="check" className="chip-icon" />{money.format(pay.paidAmount || 0)}</p>
+                            {(pay.dueAmount || 0) > 0 && <p style={{ margin: "2px 0 0", fontSize: "12px", color: "var(--app-danger,#dc2626)", fontWeight: 600, display: "flex", alignItems: "center", gap: "3px", justifyContent: "flex-end" }}><DashboardIcon name="warning" className="chip-icon" />{money.format(pay.dueAmount)}</p>}
                             <p style={{ margin: "2px 0 0", fontSize: "11px", color: "var(--app-muted,#64748b)" }}>of {money.format(pay.amount || 0)}</p>
                           </div>
                         </div>
@@ -5515,10 +6555,123 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
 
             {modal === "payment" && (
               <div className="form-grid">
-                <Field label="Student"><select className="control" value={form.student} onChange={(e) => {
-                  const auto = getStudentFeeAutoValues(e.target.value, form.feeType, form.billingMonth, form.term);
-                  setForm({ ...form, student: e.target.value, amount: auto.amount || form.amount, paidAmount: auto.paidAmount || 0 });
-                }} required><option value="">Select student</option>{data.students.map((item) => <option key={item._id} value={item._id}>{item.name} - {item.className}</option>)}</select></Field>
+
+                {/* ── Smart Student Picker (full width) ── */}
+                <div className="full-span">
+                  <div className="form-field group grid gap-2 text-[13px] font-bold text-slate-700">
+                    <span className="tracking-[0.01em]">Student</span>
+
+                    {selectedPayStudent ? (
+                      /* ── Student selected — show info chip ── */
+                      <div style={{ display: "flex", alignItems: "center", gap: "10px", padding: "10px 14px", borderRadius: "12px", background: "color-mix(in srgb,var(--app-primary,#2563eb) 8%,var(--app-surface,#fff))", border: "1px solid var(--app-border,#e2e8f0)" }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <strong style={{ fontSize: "14px" }}>{selectedPayStudent.name}</strong>
+                          <span style={{ marginLeft: "8px", fontSize: "12px", color: "var(--app-muted,#64748b)" }}>
+                            {selectedPayStudent.className}
+                            {selectedPayStudent.section ? ` · ${selectedPayStudent.section}` : ""}
+                            {selectedPayStudent.rollNumber ? ` · Roll ${selectedPayStudent.rollNumber}` : ""}
+                          </span>
+                        </div>
+                        <button type="button" className="btn soft"
+                          style={{ padding: "4px 12px", fontSize: "12px", flexShrink: 0 }}
+                          onClick={() => { setForm((f) => ({ ...f, student: "", amount: 0, paidAmount: 0 })); setPayStudentSearch(""); setPayStudentOpen(false); }}>
+                          Change
+                        </button>
+                      </div>
+                    ) : (
+                      /* ── No student — search / browse picker ── */
+                      <>
+                        {/* Mode tabs */}
+                        <div style={{ display: "flex", gap: "6px" }}>
+                          {[["search", "search", "Search"], ["browse", "folder", "Browse by Class"]].map(([m, icon, lbl]) => (
+                            <button key={m} type="button"
+                              className={`btn ${payStudentMode === m ? "primary" : "soft"}`}
+                              style={{ padding: "4px 14px", fontSize: "12px", borderRadius: "8px", display: "inline-flex", alignItems: "center", gap: "5px" }}
+                              onClick={() => setPayStudentMode(m)}>
+                              <DashboardIcon name={icon} className="chip-icon" />{lbl}
+                            </button>
+                          ))}
+                        </div>
+
+                        {/* ── Search mode ── */}
+                        {payStudentMode === "search" && (
+                          <div style={{ position: "relative" }}>
+                            <input className="control" placeholder="Type name, roll no., class or ID…"
+                              autoComplete="off" value={payStudentSearch}
+                              onChange={(e) => { setPayStudentSearch(e.target.value); setPayStudentOpen(true); }}
+                              onFocus={() => setPayStudentOpen(true)}
+                              onBlur={() => setTimeout(() => setPayStudentOpen(false), 160)}
+                            />
+                            {payStudentOpen && payStudentSearch.length >= 1 && (
+                              <ul style={{ position: "absolute", top: "calc(100% + 3px)", left: 0, right: 0, zIndex: 200, margin: 0, padding: "4px 0", listStyle: "none", background: "var(--app-surface,#fff)", border: "1px solid var(--app-border,#e2e8f0)", borderRadius: "12px", maxHeight: "220px", overflowY: "auto", boxShadow: "0 10px 28px rgba(15,23,42,0.14)" }}>
+                                {payStudentResults.length === 0 ? (
+                                  <li style={{ padding: "10px 14px", color: "var(--app-muted,#64748b)", fontSize: "13px" }}>No students found</li>
+                                ) : payStudentResults.map((s) => (
+                                  <li key={s._id}
+                                    style={{ padding: "9px 14px", cursor: "pointer", fontSize: "13px", borderBottom: "1px solid var(--app-border,#f1f5f9)" }}
+                                    onMouseDown={() => {
+                                      const auto = getStudentFeeAutoValues(s._id, form.feeType, form.billingMonth, form.term);
+                                      setForm((f) => ({ ...f, student: s._id, amount: auto.amount || f.amount, paidAmount: auto.paidAmount || 0 }));
+                                      setPayStudentSearch("");
+                                      setPayStudentOpen(false);
+                                    }}>
+                                    <strong>{s.name}</strong>
+                                    <small style={{ color: "var(--app-muted,#64748b)", marginLeft: "6px" }}>
+                                      {s.className}{s.section ? ` · ${s.section}` : ""}{s.rollNumber ? ` · Roll ${s.rollNumber}` : ""}
+                                    </small>
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                          </div>
+                        )}
+
+                        {/* ── Browse mode: Class → Section → Student ── */}
+                        {payStudentMode === "browse" && (
+                          <div style={{ display: "grid", gap: "8px" }}>
+                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+                              <select className="control" value={payStudentClass}
+                                onChange={(e) => { setPayStudentClass(e.target.value); setPayStudentSection(""); }}>
+                                <option value="">— Select Class —</option>
+                                {[...new Set(data.students.map((s) => s.className).filter(Boolean))].sort().map((c) => (
+                                  <option key={c} value={c}>{c}</option>
+                                ))}
+                              </select>
+                              <select className="control" value={payStudentSection} disabled={!payStudentClass}
+                                onChange={(e) => setPayStudentSection(e.target.value)}>
+                                <option value="">— All Sections —</option>
+                                {[...new Set(
+                                  data.students
+                                    .filter((s) => !payStudentClass || s.className === payStudentClass)
+                                    .map((s) => s.section).filter(Boolean),
+                                )].sort().map((sec) => <option key={sec} value={sec}>{sec}</option>)}
+                              </select>
+                            </div>
+                            <select className="control" value={form.student}
+                              onChange={(e) => {
+                                if (!e.target.value) return;
+                                const auto = getStudentFeeAutoValues(e.target.value, form.feeType, form.billingMonth, form.term);
+                                setForm((f) => ({ ...f, student: e.target.value, amount: auto.amount || f.amount, paidAmount: auto.paidAmount || 0 }));
+                              }}>
+                              <option value="">
+                                {payStudentClass
+                                  ? `— ${payBrowseStudents.length} student${payBrowseStudents.length !== 1 ? "s" : ""} —`
+                                  : "— Select a class first —"}
+                              </option>
+                              {payBrowseStudents.map((s) => (
+                                <option key={s._id} value={s._id}>
+                                  {s.name}{s.rollNumber ? ` (Roll: ${s.rollNumber})` : ""}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {/* ── Rest of payment form ── */}
                 <Field label="Fee Type"><select className="control" value={form.feeType} onChange={(e) => {
                   const auto = getStudentFeeAutoValues(form.student, e.target.value, form.billingMonth, form.term);
                   setForm({ ...form, feeType: e.target.value, amount: auto.amount || form.amount, paidAmount: auto.paidAmount || 0 });
@@ -5710,7 +6863,7 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
                           <span style={{ fontSize: "12px", fontWeight: 700, color: "#2563eb" }}>
                             {markEntryStudentsBase.filter((s) => s.className === markEntryClass).length} students in {markEntryClass}
                           </span>
-                          <button type="button" onClick={() => { setMarkEntryClass(""); setForm((f) => ({ ...f, student: "" })); }} style={{ fontSize: "11px", color: "var(--ui-muted,#64748b)", background: "none", border: "none", cursor: "pointer", padding: "0 2px", lineHeight: 1 }}>✕ Clear</button>
+                          <button type="button" onClick={() => { setMarkEntryClass(""); setForm((f) => ({ ...f, student: "" })); }} style={{ fontSize: "11px", color: "var(--ui-muted,#64748b)", background: "none", border: "none", cursor: "pointer", padding: "0 2px", lineHeight: 1, display: "inline-flex", alignItems: "center", gap: "2px" }}><DashboardIcon name="close" className="chip-icon" />Clear</button>
                         </div>
                       )}
                     </div>
@@ -6088,9 +7241,9 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
                             {teachersForClass.map((t) => <option key={t._id} value={t._id}>{t.name}</option>)}
                           </select>
                         </label>
-                        <button type="button" title="Remove shift" className="shift-delete-btn" style={{background:"none",border:"none",cursor:"pointer",color:"#ef4444",fontSize:"18px",lineHeight:1,padding:"0 4px",marginBottom:"2px"}}
+                        <button type="button" title="Remove shift" className="shift-delete-btn" style={{background:"none",border:"none",cursor:"pointer",color:"#ef4444",padding:"2px 4px",marginBottom:"2px",display:"flex",alignItems:"center"}}
                           onClick={() => { const s = form.shifts.filter((_, i) => i !== idx); setForm({ ...form, shifts: s }); }}>
-                          ×
+                          <DashboardIcon name="close" className="chip-icon" />
                         </button>
                       </div>
                     );
