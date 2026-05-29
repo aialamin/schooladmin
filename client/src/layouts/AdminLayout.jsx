@@ -49,6 +49,16 @@ const navSections = [
       { key: "reports", label: "Reports", icon: "chart", allowedRoles: [...FINANCE_ROLES, "audit"] },
     ],
   },
+  {
+    title: "Administration",
+    items: [
+      { key: "userManagement",    label: "Users",        icon: "addUser", allowedRoles: ["admin"] },
+      { key: "roleManagement",    label: "Roles",        icon: "shield",  allowedRoles: ["admin"] },
+      { key: "teacherAccess",     label: "Class Access", icon: "users",   allowedRoles: ["admin"] },
+      { key: "subjectManagement", label: "Subjects",     icon: "marks",   allowedRoles: ["admin"] },
+      { key: "schoolSettings",    label: "School Setup", icon: "school",  allowedRoles: ["admin"] },
+    ],
+  },
 ];
 
 const navItems = navSections.flatMap((section) => section.items);
@@ -72,8 +82,13 @@ const viewDescriptions = {
   settings: "Profile, appearance, school, and app settings.",
   academicCalendar: "Monthly calendar view with exam periods, class days, and the academic year.",
   teachers: "Directory of all teachers — subjects, assigned classes, and contact info.",
-  leaveApply:    "Submit a leave or absence application with substitute teacher assignments.",
-  leaveRequests: "Review, approve, or reject staff leave applications.",
+  leaveApply:        "Submit a leave or absence application with substitute teacher assignments.",
+  leaveRequests:     "Review, approve, or reject staff leave applications.",
+  userManagement:    "Create and manage user accounts, email addresses, and passwords.",
+  roleManagement:    "View permissions by role and change user roles across the system.",
+  teacherAccess:     "Assign which classes each teacher can view and enter marks for.",
+  subjectManagement: "Define which subjects are taught in each class.",
+  schoolSettings:    "School name, logos, academic year, exam settings, and report text.",
 };
 
 function Icon({ name }) {
@@ -105,6 +120,9 @@ function Icon({ name }) {
     leave: <><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 12h6"/><path d="M9 16h4"/><path d="M15 16l1.5 1.5L19 14"/></>,
     close: <><path d="m6 6 12 12"/><path d="M18 6 6 18"/></>,
     chevron: <><path d="m6 9 6 6 6-6"/></>,
+    shield: <><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/></>,
+    addUser: <><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6"/><path d="M22 11h-6"/></>,
+    school: <><path d="m2 22 10-9 10 9"/><path d="M4 13V9l8-7 8 7v4"/><path d="M9 22v-5h6v5"/><path d="M9 10h1"/><path d="M14 10h1"/></>,
   };
   return <svg {...props}>{icons[name] || icons.dashboard}</svg>;
 }
@@ -399,7 +417,7 @@ export default function AdminLayout({ activeView, children, onLogout, onOpenUser
         // Role-aware shortcuts: show the 4 most relevant items per role.
         // These mirror the desktop sidebar — same keys, same allowedRoles checks.
         const ROLE_BOTTOM_NAV = {
-          admin:      ["dashboard", "students",    "employees",    "fees"       ],
+          admin:      ["dashboard", "students",    "userManagement", "fees"     ],
           accountant: ["dashboard", "fees",        "salaries",     "expenses"   ],
           accounts:   ["dashboard", "fees",        "reports",      "students"   ],
           teacher:    ["dashboard", "marks",       "students",     "leaveApply" ],

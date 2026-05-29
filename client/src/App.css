@@ -13144,3 +13144,65 @@ html[data-theme="dark"] .rt-time-cell {
     font-size: 10.5px;
   }
 }
+
+/* ── Dark mode: result card preview ────────────────────────────────────────── */
+html[data-theme="dark"] .report-preview-card {
+  background: var(--app-surface, #1e293b) !important;
+  border-color: var(--app-border, rgba(255,255,255,0.1)) !important;
+}
+html[data-theme="dark"] .report-preview-header {
+  background: color-mix(in srgb, var(--app-primary, #2563eb) 7%, var(--app-surface, #1e293b)) !important;
+  border-color: var(--app-border, rgba(255,255,255,0.15)) !important;
+}
+html[data-theme="dark"] .report-logo-row {
+  border-bottom-color: var(--app-border, rgba(255,255,255,0.15)) !important;
+}
+html[data-theme="dark"] .report-preview-header h3 {
+  color: #f87171 !important;
+}
+html[data-theme="dark"] .report-preview-header p {
+  color: #6ee7b7 !important;
+}
+html[data-theme="dark"] .report-preview-header small {
+  color: var(--app-text-2, #cbd5e1) !important;
+}
+html[data-theme="dark"] .report-preview-header h4 {
+  color: #fca5a5 !important;
+}
+html[data-theme="dark"] .report-preview-header > strong {
+  color: #fca5a5 !important;
+  border-bottom-color: rgba(252,165,165,0.5) !important;
+}
+html[data-theme="dark"] .report-logo-preview {
+  background: rgba(255,255,255,0.06) !important;
+  border-color: var(--app-border, rgba(255,255,255,0.15)) !important;
+}
+html[data-theme="dark"] .report-student-strip,
+html[data-theme="dark"] .report-result-strip {
+  background: color-mix(in srgb, var(--app-surface-2, #0f172a) 80%, transparent) !important;
+  border-color: var(--app-border, rgba(255,255,255,0.1)) !important;
+}
+html[data-theme="dark"] .report-student-strip span,
+html[data-theme="dark"] .report-result-strip span {
+  border-right-color: var(--app-border, rgba(255,255,255,0.1)) !important;
+  color: var(--app-text, #e2e8f0) !important;
+}
+html[data-theme="dark"] .report-preview-table-wrap {
+  border-color: var(--app-border, rgba(255,255,255,0.12)) !important;
+}
+html[data-theme="dark"] .report-preview-table {
+  background: var(--app-surface, #1e293b) !important;
+}
+html[data-theme="dark"] .report-preview-table th {
+  background: color-mix(in srgb, var(--app-surface-2, #0f172a) 70%, transparent) !important;
+  color: var(--app-text-2, #cbd5e1) !important;
+  border-color: var(--app-border, rgba(255,255,255,0.1)) !important;
+}
+html[data-theme="dark"] .report-preview-table td {
+  color: var(--app-text, #e2e8f0) !important;
+  border-color: var(--app-border, rgba(255,255,255,0.08)) !important;
+}
+html[data-theme="dark"] .report-preview-table tfoot td {
+  background: color-mix(in srgb, var(--app-surface-2, #0f172a) 60%, transparent) !important;
+  font-weight: 800 !important;
+}

@@ -1003,9 +1003,10 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
       .catch(() => { /* non-fatal */ });
   }, [token, user.role]);
 
-  // Load all user accounts when admin opens Settings
+  // Load all user accounts when admin opens Settings, User Management, or Role Management
   useEffect(() => {
-    if (activeView !== "settings" || user.role !== "admin") return;
+    const adminViews = ["settings", "userManagement", "roleManagement"];
+    if (!adminViews.includes(activeView) || user.role !== "admin") return;
     setAllUsersLoading(true);
     erpApi.getUsers(token)
       .then((res) => {
@@ -1019,6 +1020,13 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
       .catch(() => {})
       .finally(() => setAllUsersLoading(false));
   }, [activeView, token, user.role]);
+
+  // Init subject draft when navigating to subject management view
+  useEffect(() => {
+    if (activeView === "subjectManagement" && isAdmin) {
+      setSubjectMgmtDraft(data.schoolSettings?.classSubjectsConfig || {});
+    }
+  }, [activeView, isAdmin, data.schoolSettings]);
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
@@ -3131,7 +3139,7 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
                 </div>
                 <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
                   {teacherAllowed && <button className="btn soft" type="button" onClick={() => { setForm({ ...emptyForms.mark, student: "" }); openModal("mark"); }}>Enter Marks</button>}
-                  <button className="btn soft" type="button" onClick={() => setActiveView("resultCards")} title="View printable result cards">Result Cards</button>
+                  <button className="btn soft" type="button" onClick={() => { setResultCardFilter((f) => ({ ...f, class: cls, student: "", exam: "" })); setActiveView("resultCards"); }} title="View printable result cards for this class">Result Cards</button>
                 </div>
               </div>
 
@@ -4607,6 +4615,429 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
     );
   };
 
+  // ── Standalone admin views ─────────────────────────────────────────────────
+
+  const renderAdminUserManagement = () => {
+    const q = userMgmtSearch.toLowerCase();
+    const filtered = q ? allUsers.filter((u) => u.name?.toLowerCase().includes(q) || u.email?.toLowerCase().includes(q)) : allUsers;
+    return (
+      <div className="stack">
+        <SectionHeader eyebrow="Administration" title="User Management"
+          action={(
+            <div style={{ position: "relative", minWidth: 220 }}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ position:"absolute", left:10, top:"50%", transform:"translateY(-50%)", width:15, height:15, color:"var(--ui-muted,#64748b)", pointerEvents:"none" }}><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+              <input className="control" placeholder="Search name or email…" value={userMgmtSearch} onChange={(e) => setUserMgmtSearch(e.target.value)} style={{ paddingLeft:"34px", height:"38px", fontSize:"13px" }} />
+            </div>
+          )}
+        />
+        <section className="panel" style={{ padding:0, overflow:"hidden" }}>
+          <div style={{ overflowX:"auto", WebkitOverflowScrolling:"touch" }}>
+            {allUsersLoading ? (
+              <div style={{ padding:"24px", color:"var(--ui-muted,#64748b)", fontSize:"13px" }}>Loading users…</div>
+            ) : filtered.length === 0 ? (
+              <div style={{ padding:"24px", color:"var(--ui-muted,#64748b)", fontSize:"13px" }}>No accounts found.</div>
+            ) : (
+              <table style={{ width:"100%", borderCollapse:"collapse", fontSize:"13px", minWidth:"860px" }}>
+                <thead>
+                  <tr style={{ borderBottom:"1px solid var(--ui-line,#e2e8f0)" }}>
+                    {["Name","Email","Password","Role","Action"].map((h) => (
+                      <th key={h} style={{ padding:"10px 16px", textAlign:"left", fontWeight:700, color:"var(--ui-muted,#64748b)", fontSize:"11px", textTransform:"uppercase", letterSpacing:"0.08em", whiteSpace:"nowrap" }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map((u) => {
+                    const accountKey = userAccountKey(u);
+                    const draft = userAccountDrafts[accountKey] || { email: u.email || "", password: "" };
+                    const passwordValue = draft.password || "";
+                    return (
+                      <tr key={accountKey} style={{ borderBottom:"1px solid var(--ui-line,#f1f5f9)" }}>
+                        <td style={{ padding:"11px 16px", fontWeight:600, whiteSpace:"nowrap" }}>{u.name}</td>
+                        <td style={{ padding:"11px 16px", minWidth:220 }}>
+                          <input type="email" className="control" value={(draft.email ?? u.email) || ""} autoComplete="off" onChange={(e) => setUserAccountDrafts((prev) => ({ ...prev, [accountKey]:{ email:e.target.value, password:prev[accountKey]?.password||"" } }))} />
+                        </td>
+                        <td style={{ padding:"11px 16px", minWidth:220 }}>
+                          <div className="password-eye-field">
+                            <input type={visibleUserPasswords[accountKey] ? "text" : "password"} className="control" placeholder="••••••••" value={passwordValue} minLength={6} autoComplete="new-password" onChange={(e) => setUserAccountDrafts((prev) => ({ ...prev, [accountKey]:{ email:prev[accountKey]?.email??u.email??"", password:e.target.value } }))} />
+                            <button aria-label="Toggle password" type="button" className="password-eye-btn" onClick={() => setVisibleUserPasswords((prev) => ({ ...prev, [accountKey]:!prev[accountKey] }))}><DashboardIcon name="eye" /></button>
+                          </div>
+                          {passwordValue.length > 0 && passwordValue.length < 6 && <small style={{ display:"block", marginTop:5, color:"#dc2626", fontWeight:700 }}>Use at least 6 characters.</small>}
+                        </td>
+                        <td style={{ padding:"11px 16px", whiteSpace:"nowrap" }}>
+                          <span style={{ padding:"2px 10px", borderRadius:"999px", fontSize:"11.5px", fontWeight:700, background:"rgba(99,102,241,0.08)", color:"#4f46e5", border:"1px solid rgba(99,102,241,0.2)" }}>{u.role}</span>
+                        </td>
+                        <td style={{ padding:"11px 16px", whiteSpace:"nowrap" }}>
+                          <button type="button" className="btn primary" style={{ fontSize:"12px", minHeight:"38px", padding:"6px 12px" }}
+                            disabled={userPasswordLoading || !String((draft.email??u.email)||"").trim() || (passwordValue.length > 0 && passwordValue.length < 6)}
+                            onClick={() => handleSetUserPassword(u)}>
+                            {userPasswordLoading ? "Saving..." : "Save Changes"}
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </section>
+      </div>
+    );
+  };
+
+  const renderAdminRoleManagement = () => {
+    const ROLE_DEFS = [
+      { role:"admin",      label:"Admin",      students:"full",  marks:"full",  fees:"full",  salary:"full",  employees:"full",  settings:"full",  attendance:"full"  },
+      { role:"accounts",   label:"Accounts",   students:"view",  marks:"view",  fees:"full",  salary:"full",  employees:"view",  settings:"none",  attendance:"full"  },
+      { role:"accountant", label:"Accountant", students:"view",  marks:"view",  fees:"full",  salary:"full",  employees:"view",  settings:"none",  attendance:"full"  },
+      { role:"cashier",    label:"Cashier",    students:"view",  marks:"view",  fees:"write", salary:"none",  employees:"none",  settings:"none",  attendance:"none"  },
+      { role:"teacher",    label:"Teacher",    students:"class", marks:"class", fees:"none",  salary:"own",   employees:"none",  settings:"none",  attendance:"none"  },
+      { role:"staff",      label:"Staff",      students:"view",  marks:"view",  fees:"own",   salary:"own",   employees:"none",  settings:"none",  attendance:"full"  },
+      { role:"audit",      label:"Audit",      students:"view",  marks:"view",  fees:"view",  salary:"view",  employees:"view",  settings:"none",  attendance:"view"  },
+      { role:"student",    label:"Student",    students:"own",   marks:"own",   fees:"own",   salary:"none",  employees:"none",  settings:"none",  attendance:"none"  },
+    ];
+    const permBadge = (level) => {
+      const map = { full:{label:"Full",bg:"rgba(5,150,105,0.11)",color:"#059669"}, write:{label:"Write",bg:"rgba(37,99,235,0.11)",color:"#1d4ed8"}, view:{label:"View",bg:"rgba(37,99,235,0.08)",color:"#2563eb"}, class:{label:"Class",bg:"rgba(124,58,237,0.09)",color:"#7c3aed"}, own:{label:"Own",bg:"rgba(217,119,6,0.09)",color:"#b45309"}, none:{label:"—",bg:"transparent",color:"#94a3b8"} };
+      const { label, bg, color } = map[level] || map.none;
+      return <span style={{ background:bg, color, padding:"2px 9px", borderRadius:6, fontSize:11.5, fontWeight:700 }}>{label}</span>;
+    };
+    const cols = ["students","marks","fees","salary","employees","settings","attendance"];
+    const colLabels = { students:"Students",marks:"Marks",fees:"Fees",salary:"Salary",employees:"Employees",settings:"Settings",attendance:"Attendance" };
+    return (
+      <div className="stack">
+        <SectionHeader eyebrow="Administration" title="Role Management" />
+        <section className="panel" style={{ padding:0, overflow:"hidden" }}>
+          <div style={{ padding:"16px 22px 14px", borderBottom:"1px solid var(--ui-line,#e2e8f0)" }}>
+            <p style={{ margin:0, fontSize:13, color:"var(--ui-muted,#64748b)" }}>Permissions matrix — what each role can access. To change a user's role, use the table below.</p>
+          </div>
+          <div style={{ overflowX:"auto", WebkitOverflowScrolling:"touch" }}>
+            <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12.5, minWidth:680 }}>
+              <thead>
+                <tr style={{ borderBottom:"1px solid var(--ui-line,#e2e8f0)" }}>
+                  <th style={{ padding:"9px 14px", textAlign:"left", fontWeight:700, color:"var(--ui-muted,#64748b)", fontSize:11, textTransform:"uppercase", letterSpacing:"0.08em" }}>Role</th>
+                  {cols.map((c) => <th key={c} style={{ padding:"9px 10px", textAlign:"center", fontWeight:700, color:"var(--ui-muted,#64748b)", fontSize:11, textTransform:"uppercase", letterSpacing:"0.08em", whiteSpace:"nowrap" }}>{colLabels[c]}</th>)}
+                </tr>
+              </thead>
+              <tbody>
+                {ROLE_DEFS.map((rd) => (
+                  <tr key={rd.role} style={{ borderBottom:"1px solid var(--ui-line,#f1f5f9)" }}>
+                    <td style={{ padding:"10px 14px", fontWeight:700, whiteSpace:"nowrap" }}>
+                      <span style={{ padding:"3px 10px", borderRadius:999, fontSize:12, fontWeight:700, background:"rgba(99,102,241,0.08)", color:"#4f46e5", border:"1px solid rgba(99,102,241,0.2)" }}>{rd.label}</span>
+                    </td>
+                    {cols.map((c) => <td key={c} style={{ padding:"10px 10px", textAlign:"center" }}>{permBadge(rd[c])}</td>)}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+        <section className="panel" style={{ padding:0, overflow:"hidden" }}>
+          <div style={{ padding:"16px 22px 14px", borderBottom:"1px solid var(--ui-line,#e2e8f0)" }}>
+            <p style={{ margin:0, fontWeight:700, fontSize:14 }}>Change User Role</p>
+            <p style={{ margin:"3px 0 0", fontSize:13, color:"var(--ui-muted,#64748b)" }}>Select a new role for any account and click Change Role.</p>
+          </div>
+          <div style={{ overflowX:"auto", WebkitOverflowScrolling:"touch" }}>
+            {allUsersLoading ? (
+              <div style={{ padding:"20px 22px", color:"var(--ui-muted)", fontSize:13 }}>Loading users…</div>
+            ) : (
+              <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13, minWidth:520 }}>
+                <thead>
+                  <tr style={{ borderBottom:"1px solid var(--ui-line,#e2e8f0)" }}>
+                    {["Name","Email","Current Role","Change To","Action"].map((h) => (
+                      <th key={h} style={{ padding:"8px 12px", textAlign:"left", fontWeight:700, color:"var(--ui-muted,#64748b)", fontSize:11, textTransform:"uppercase", letterSpacing:"0.07em", whiteSpace:"nowrap" }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {allUsers.map((u) => {
+                    const accountKey = `role-${u._id}`;
+                    const draftRole = userAccountDrafts[accountKey]?.role ?? u.role ?? "student";
+                    return (
+                      <tr key={u._id} style={{ borderBottom:"1px solid var(--ui-line,#f1f5f9)" }}>
+                        <td style={{ padding:"9px 12px", fontWeight:600, whiteSpace:"nowrap" }}>{u.name}</td>
+                        <td style={{ padding:"9px 12px", color:"var(--ui-muted,#64748b)", fontSize:12 }}>{u.email}</td>
+                        <td style={{ padding:"9px 12px", whiteSpace:"nowrap" }}>
+                          <span style={{ padding:"2px 10px", borderRadius:999, fontSize:11.5, fontWeight:700, background:"rgba(99,102,241,0.08)", color:"#4f46e5", border:"1px solid rgba(99,102,241,0.2)" }}>{u.role}</span>
+                        </td>
+                        <td style={{ padding:"9px 12px", minWidth:150 }}>
+                          <select className="control" style={{ height:34, fontSize:13 }} value={draftRole}
+                            onChange={(e) => setUserAccountDrafts((prev) => ({ ...prev, [accountKey]:{ ...prev[accountKey], role:e.target.value } }))}>
+                            {["admin","teacher","accounts","accountant","cashier","staff","audit","student"].map((r) => <option key={r} value={r}>{r}</option>)}
+                          </select>
+                        </td>
+                        <td style={{ padding:"9px 12px", whiteSpace:"nowrap" }}>
+                          <button type="button" className="btn primary" style={{ fontSize:12, padding:"5px 12px", minHeight:32 }}
+                            disabled={roleChangeSaving[u._id] || draftRole === u.role}
+                            onClick={async () => {
+                              if (draftRole === u.role) return;
+                              setRoleChangeSaving((p) => ({ ...p, [u._id]:true }));
+                              try {
+                                await erpApi.updateUser(token, u._id, { name:u.name, email:u.email, role:draftRole });
+                                setAllUsers((prev) => prev.map((uu) => uu._id === u._id ? { ...uu, role:draftRole } : uu));
+                                showDoneAlert(`${u.name} role changed to ${draftRole}.`);
+                              } catch (err) { setError(getErrorMessage(err)); }
+                              finally { setRoleChangeSaving((p) => ({ ...p, [u._id]:false })); }
+                            }}>
+                            {roleChangeSaving[u._id] ? "Saving…" : "Change Role"}
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </section>
+      </div>
+    );
+  };
+
+  const renderAdminTeacherAccess = () => {
+    const teachers = data.employees.filter((e) => e.role === "teacher");
+    const allClasses = [...new Set(data.students.map((s) => s.className).filter(Boolean))].sort((a, b) => {
+      const n = (s) => Number((String(s).match(/\d+/)||[0])[0]);
+      return n(a) - n(b) || a.localeCompare(b);
+    });
+
+    return (
+      <div className="stack">
+        <SectionHeader eyebrow="Administration" title="Teacher Class Access"
+          action={<p style={{ margin:0, fontSize:13, color:"var(--edu-muted)" }}>Check the classes each teacher can view and enter marks for. Changes are saved per teacher.</p>}
+        />
+        {teachers.length === 0 ? (
+          <div className="info-card"><h3>No teachers found</h3><p>Add employees with role "teacher" first.</p></div>
+        ) : (
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(320px,1fr))", gap:"16px" }}>
+            {teachers.map((emp) => {
+              const currentAllowed = new Set(Array.isArray(emp.allowedClasses) ? emp.allowedClasses : (emp.assignedClass ? [emp.assignedClass] : []));
+              const draftKey = `ta-${emp._id}`;
+              const draftSet = userAccountDrafts[draftKey]?.allowedClasses ? new Set(userAccountDrafts[draftKey].allowedClasses) : currentAllowed;
+              const isDirty = JSON.stringify([...draftSet].sort()) !== JSON.stringify([...currentAllowed].sort());
+
+              const toggleCls = (cls) => {
+                const next = new Set(draftSet);
+                if (next.has(cls)) next.delete(cls); else next.add(cls);
+                setUserAccountDrafts((prev) => ({ ...prev, [draftKey]:{ allowedClasses:[...next] } }));
+              };
+
+              const handleSave = async () => {
+                const newAllowed = userAccountDrafts[draftKey]?.allowedClasses ?? [...currentAllowed];
+                setTeacherAccessSaving((p) => ({ ...p, [emp._id]:true }));
+                try {
+                  await erpApi.updateEmployee(token, emp._id, {
+                    ...emp, phone:emp.contactInfo?.phone||"", email:emp.contactInfo?.email||"", address:emp.contactInfo?.address||"",
+                    allowedClasses:newAllowed,
+                  });
+                  const partial = await refreshPartialData(token, ["employees"]);
+                  setData((prev) => ({ ...prev, ...partial }));
+                  showDoneAlert(`Access updated for ${emp.name}.`);
+                } catch (err) { setError(getErrorMessage(err)); }
+                finally { setTeacherAccessSaving((p) => ({ ...p, [emp._id]:false })); }
+              };
+
+              return (
+                <div key={emp._id} className="panel" style={{ padding:"20px", display:"flex", flexDirection:"column", gap:16 }}>
+                  {/* Teacher header */}
+                  <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+                    <div style={{ width:42, height:42, borderRadius:"50%", background:"linear-gradient(135deg,#10b981,#059669)", color:"#fff", display:"grid", placeItems:"center", flexShrink:0 }}>
+                      <DashboardIcon name="users" style={{ width:20, height:20 }} />
+                    </div>
+                    <div style={{ minWidth:0 }}>
+                      <strong style={{ display:"block", fontSize:15 }}>{emp.name}</strong>
+                      <small style={{ color:"var(--edu-muted)", fontSize:12 }}>{emp.contactInfo?.email || emp.email || emp.assignedClass || "Teacher"}</small>
+                    </div>
+                  </div>
+
+                  {/* Class checkboxes */}
+                  {allClasses.length === 0 ? (
+                    <p style={{ margin:0, fontSize:13, color:"var(--edu-muted)" }}>No classes found. Add students first.</p>
+                  ) : (
+                    <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(110px,1fr))", gap:8 }}>
+                      {allClasses.map((cls) => {
+                        const checked = draftSet.has(cls);
+                        return (
+                          <label key={cls} style={{ display:"flex", alignItems:"center", gap:7, padding:"7px 10px", borderRadius:8, cursor:"pointer", fontSize:13, fontWeight: checked ? 700 : 500, background: checked ? "color-mix(in srgb,var(--app-success,#10b981) 12%,var(--app-surface,#fff))" : "var(--edu-bg-alt,#f8fafc)", border:`1.5px solid ${checked ? "var(--app-success,#10b981)" : "var(--edu-border,#e2e8f0)"}`, transition:"all 0.15s", userSelect:"none" }}>
+                            <input type="checkbox" checked={checked} onChange={() => toggleCls(cls)} style={{ width:15, height:15, cursor:"pointer", accentColor:"var(--app-success,#10b981)", flexShrink:0 }} />
+                            <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{cls}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* Save */}
+                  <button type="button" className={`btn ${isDirty ? "success" : "soft"}`} style={{ width:"100%", fontWeight:700, fontSize:13 }}
+                    disabled={teacherAccessSaving[emp._id] || !isDirty}
+                    onClick={handleSave}>
+                    {teacherAccessSaving[emp._id] ? "Saving…" : isDirty ? "Save Changes" : "Saved"}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderAdminSubjectManagement = () => {
+    const allClasses = [...new Set([
+      ...data.students.map((s) => s.className),
+      ...academicClassOptions.map((c) => c.className),
+    ].filter(Boolean))].sort((a, b) => {
+      const idx = new Map(academicClassOptions.map((c, i) => [c.className, i]));
+      return (idx.get(a) ?? 999) - (idx.get(b) ?? 999);
+    });
+
+    const selectedSubjects = subjectMgmtClass
+      ? (subjectMgmtDraft[subjectMgmtClass] ?? subjectsForClass(subjectMgmtClass, subjectMgmtDraft))
+      : [];
+    const defaultSubjects = subjectsForClass(subjectMgmtClass);
+
+    const toggleSubject = (subj) => {
+      const current = subjectMgmtDraft[subjectMgmtClass] ?? subjectsForClass(subjectMgmtClass, subjectMgmtDraft);
+      const next = current.includes(subj) ? current.filter((s) => s !== subj) : [...current, subj];
+      setSubjectMgmtDraft((prev) => ({ ...prev, [subjectMgmtClass]: next }));
+    };
+
+    const catalogGroupLabels = { prePrimary:"Pre-Primary (Play, Nursery, KG)", primary:"Primary (Class 1–5)", junior:"Junior (Class 6–8)", science:"Higher Secondary — Science", arts:"Higher Secondary — Arts", commerce:"Higher Secondary — Commerce" };
+
+    const handleSave = async () => {
+      setSubjectMgmtSaving(true);
+      try {
+        const res = await erpApi.updateSchoolSettings(token, { classSubjectsConfig: subjectMgmtDraft });
+        setData((prev) => ({ ...prev, schoolSettings: { ...prev.schoolSettings, classSubjectsConfig: res.data.settings.classSubjectsConfig } }));
+        showDoneAlert("Class subjects saved.");
+      } catch (err) { setError(getErrorMessage(err)); }
+      finally { setSubjectMgmtSaving(false); }
+    };
+
+    return (
+      <div className="stack">
+        <SectionHeader eyebrow="Administration" title="Subject Management"
+          action={(
+            <select className="control small" value={subjectMgmtClass} onChange={(e) => setSubjectMgmtClass(e.target.value)}>
+              <option value="">— Select a class —</option>
+              {allClasses.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+          )}
+        />
+
+        {!subjectMgmtClass ? (
+          <div className="info-card" style={{ textAlign:"center", padding:"40px 24px" }}>
+            <DashboardIcon name="marks" style={{ width:40, height:40, margin:"0 auto 12px", opacity:0.3 }} />
+            <h3 style={{ margin:"0 0 6px" }}>Select a class to manage subjects</h3>
+            <p style={{ margin:0, color:"var(--edu-muted)", fontSize:14 }}>Use the dropdown above to choose a class.</p>
+          </div>
+        ) : (
+          <div className="panel" style={{ padding:"22px" }}>
+            {/* Header row */}
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:12, marginBottom:20, paddingBottom:16, borderBottom:"1px solid var(--edu-border)" }}>
+              <div>
+                <h3 style={{ margin:0, fontSize:16 }}>Subjects for <em style={{ fontStyle:"normal", color:"var(--app-primary,#2563eb)" }}>{subjectMgmtClass}</em></h3>
+                <p style={{ margin:"3px 0 0", fontSize:13, color:"var(--edu-muted)" }}>{selectedSubjects.length} subject{selectedSubjects.length !== 1 ? "s" : ""} selected — check or uncheck to configure</p>
+              </div>
+              <div style={{ display:"flex", gap:8 }}>
+                <button type="button" className="btn soft" style={{ fontSize:12 }}
+                  onClick={() => setSubjectMgmtDraft((prev) => ({ ...prev, [subjectMgmtClass]: [...defaultSubjects] }))}>
+                  Reset to Default
+                </button>
+                <button type="button" className="btn success" style={{ fontSize:12 }}
+                  disabled={subjectMgmtSaving} onClick={handleSave}>
+                  {subjectMgmtSaving ? "Saving…" : "Save Subjects"}
+                </button>
+              </div>
+            </div>
+
+            {/* Grouped checkboxes from catalog */}
+            <div style={{ display:"flex", flexDirection:"column", gap:20 }}>
+              {Object.entries(subjectCatalog).map(([group, subjects]) => (
+                <div key={group}>
+                  <p style={{ margin:"0 0 10px", fontSize:11, fontWeight:800, textTransform:"uppercase", letterSpacing:"0.08em", color:"var(--edu-muted)" }}>{catalogGroupLabels[group] || group}</p>
+                  <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))", gap:8 }}>
+                    {subjects.map((subj) => {
+                      const checked = selectedSubjects.includes(subj);
+                      return (
+                        <label key={subj} style={{ display:"flex", alignItems:"center", gap:9, padding:"9px 13px", borderRadius:9, cursor:"pointer", fontSize:13, fontWeight: checked ? 700 : 500, background: checked ? "color-mix(in srgb,var(--app-primary,#2563eb) 10%,var(--app-surface,#fff))" : "var(--edu-bg-alt,#f8fafc)", border:`1.5px solid ${checked ? "var(--app-primary,#2563eb)" : "var(--edu-border,#e2e8f0)"}`, transition:"all 0.15s", userSelect:"none" }}>
+                          <input type="checkbox" checked={checked} onChange={() => toggleSubject(subj)} style={{ width:15, height:15, cursor:"pointer", accentColor:"var(--app-primary,#2563eb)", flexShrink:0 }} />
+                          {subj}
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+
+              {/* Custom subjects not in catalog */}
+              {(() => {
+                const catalogAll = new Set(Object.values(subjectCatalog).flat());
+                const customOnly = selectedSubjects.filter((s) => !catalogAll.has(s));
+                if (customOnly.length === 0 && !subjectMgmtClass) return null;
+                return (
+                  <div>
+                    <p style={{ margin:"0 0 10px", fontSize:11, fontWeight:800, textTransform:"uppercase", letterSpacing:"0.08em", color:"var(--edu-muted)" }}>Custom Subjects</p>
+                    <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))", gap:8, marginBottom:customOnly.length > 0 ? 10 : 0 }}>
+                      {customOnly.map((subj) => (
+                        <label key={subj} style={{ display:"flex", alignItems:"center", gap:9, padding:"9px 13px", borderRadius:9, cursor:"pointer", fontSize:13, fontWeight:700, background:"color-mix(in srgb,var(--app-primary,#2563eb) 10%,var(--app-surface,#fff))", border:"1.5px solid var(--app-primary,#2563eb)", transition:"all 0.15s", userSelect:"none" }}>
+                          <input type="checkbox" checked onChange={() => toggleSubject(subj)} style={{ width:15, height:15, cursor:"pointer", accentColor:"var(--app-primary,#2563eb)", flexShrink:0 }} />
+                          {subj}
+                        </label>
+                      ))}
+                    </div>
+                    <form onSubmit={(e) => { e.preventDefault(); const input = e.target.elements.newSubject; const val = input.value.trim(); if (!val || selectedSubjects.includes(val)) return; setSubjectMgmtDraft((prev) => ({ ...prev, [subjectMgmtClass]: [...(prev[subjectMgmtClass] ?? defaultSubjects), val] })); input.value = ""; }}>
+                      <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+                        <input name="newSubject" className="control" style={{ maxWidth:240 }} placeholder="Add a custom subject…" />
+                        <button type="submit" className="btn primary" style={{ fontSize:13, minHeight:38 }}>+ Add</button>
+                      </div>
+                    </form>
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderAdminSchoolSettings = () => (
+    <div className="stack">
+      <SectionHeader eyebrow="Administration" title="School Setup"
+        action={<button className="btn primary" type="button" onClick={() => openModal("schoolSettings")}>Edit Settings</button>}
+      />
+      {(() => {
+        const s = schoolSettings;
+        const rows = [
+          ["School Name", s.schoolName], ["Short Name", s.shortName], ["Subtitle", s.subtitle],
+          ["Address", s.address], ["Phone", s.phone], ["Email", s.schoolEmail],
+          ["Website", s.website], ["Academic Year", s.academicYear], ["Academic Session", s.academicSession],
+          ["Class Start Time", s.classStartTime], ["Default Exam Title", s.defaultExamTitle],
+          ["Default Pass Mark", s.defaultPassMark ? `${s.defaultPassMark}%` : "—"],
+          ["Principal Name", s.principalName], ["Support Email", s.supportEmail],
+          ["Admission Notice", s.admissionNotice], ["Result Remarks", s.resultRemarksDefault],
+        ];
+        return (
+          <section className="panel" style={{ padding:0, overflow:"hidden" }}>
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))" }}>
+              {rows.map(([label, value], i) => (
+                <div key={label} style={{ padding:"14px 20px", borderBottom: i < rows.length - 1 ? "1px solid var(--ui-line,#e2e8f0)" : undefined, display:"flex", flexDirection:"column", gap:2 }}>
+                  <span style={{ fontSize:11, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.07em", color:"var(--ui-muted,#64748b)" }}>{label}</span>
+                  <span style={{ fontSize:14, fontWeight:600, color: value ? "var(--ui-text,#1e293b)" : "var(--ui-muted,#64748b)" }}>{value || "—"}</span>
+                </div>
+              ))}
+            </div>
+            <div style={{ padding:"16px 20px", borderTop:"1px solid var(--ui-line,#e2e8f0)", display:"flex", gap:10, justifyContent:"flex-end" }}>
+              <button className="btn primary" type="button" onClick={() => openModal("schoolSettings")}>Edit School Settings</button>
+            </div>
+          </section>
+        );
+      })()}
+    </div>
+  );
+
+  // ── End standalone admin views ─────────────────────────────────────────────
+
   const renderSettings = () => (
     <div className="stack settings-page">
       <SectionHeader
@@ -4660,9 +5091,7 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
             <span className="settings-icon" style={{ background: "linear-gradient(135deg,#6366f1,#8b5cf6)", color: "#fff" }}><DashboardIcon name="addUser" /></span>
             <h3>User Management</h3>
             <p>Search accounts, update email addresses, and reset passwords.</p>
-            <button className="btn soft" type="button" onClick={() => setAdminUserMgmtOpen((v) => !v)}>
-              {adminUserMgmtOpen ? "Close Panel" : "Manage Users"}
-            </button>
+            <button className="btn soft" type="button" onClick={() => setActiveView("userManagement")}>Open</button>
           </article>
         )}
         {isAdmin && (
@@ -4670,9 +5099,7 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
             <span className="settings-icon" style={{ background: "linear-gradient(135deg,#0ea5e9,#2563eb)", color: "#fff" }}><DashboardIcon name="shield" /></span>
             <h3>Role Management</h3>
             <p>View permissions by role and change user roles.</p>
-            <button className="btn soft" type="button" onClick={() => setRoleMgmtOpen((v) => !v)}>
-              {roleMgmtOpen ? "Close Panel" : "Manage Roles"}
-            </button>
+            <button className="btn soft" type="button" onClick={() => setActiveView("roleManagement")}>Open</button>
           </article>
         )}
         {isAdmin && (
@@ -4680,9 +5107,7 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
             <span className="settings-icon" style={{ background: "linear-gradient(135deg,#10b981,#059669)", color: "#fff" }}><DashboardIcon name="users" /></span>
             <h3>Teacher Class Access</h3>
             <p>Assign which classes each teacher can view and enter marks for.</p>
-            <button className="btn soft" type="button" onClick={() => setTeacherAccessOpen((v) => !v)}>
-              {teacherAccessOpen ? "Close Panel" : "Manage Access"}
-            </button>
+            <button className="btn soft" type="button" onClick={() => setActiveView("teacherAccess")}>Open</button>
           </article>
         )}
         {isAdmin && (
@@ -4690,9 +5115,15 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
             <span className="settings-icon" style={{ background: "linear-gradient(135deg,#f59e0b,#d97706)", color: "#fff" }}><DashboardIcon name="marks" /></span>
             <h3>Subject Management</h3>
             <p>Define which subjects are taught in each class.</p>
-            <button className="btn soft" type="button" onClick={() => { setSubjectMgmtOpen((v) => !v); setSubjectMgmtDraft(data.schoolSettings?.classSubjectsConfig || {}); }}>
-              {subjectMgmtOpen ? "Close Panel" : "Manage Subjects"}
-            </button>
+            <button className="btn soft" type="button" onClick={() => setActiveView("subjectManagement")}>Open</button>
+          </article>
+        )}
+        {isAdmin && (
+          <article className="settings-card panel">
+            <span className="settings-icon" style={{ background: "linear-gradient(135deg,#ef4444,#dc2626)", color: "#fff" }}><DashboardIcon name="school" /></span>
+            <h3>School Setup</h3>
+            <p>School name, logos, academic year, exam settings, and report text.</p>
+            <button className="btn soft" type="button" onClick={() => setActiveView("schoolSettings")}>Open</button>
           </article>
         )}
       </section>
@@ -6100,8 +6531,13 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
       {activeView === "settings" && user.role !== "student" && renderSettings()}
       {activeView === "teachers" && user.role === "student" && renderTeachers()}
       {activeView === "academicCalendar" && renderAcademicCalendar()}
-      {activeView === "leaveApply"    && ["teacher","staff"].includes(user.role) && renderLeaveApply()}
-      {activeView === "leaveRequests" && isAdmin && renderLeaveRequests()}
+      {activeView === "leaveApply"        && ["teacher","staff"].includes(user.role) && renderLeaveApply()}
+      {activeView === "leaveRequests"     && isAdmin && renderLeaveRequests()}
+      {activeView === "userManagement"    && isAdmin && renderAdminUserManagement()}
+      {activeView === "roleManagement"    && isAdmin && renderAdminRoleManagement()}
+      {activeView === "teacherAccess"     && isAdmin && renderAdminTeacherAccess()}
+      {activeView === "subjectManagement" && isAdmin && renderAdminSubjectManagement()}
+      {activeView === "schoolSettings"    && isAdmin && renderAdminSchoolSettings()}
 
       {profileStudent && (() => {
         const classColors = { "Play": "#7c3aed", "Nursery": "#0891b2", "KG": "#0d9488", "Class 1": "#2563eb", "Class 2": "#7c3aed", "Class 3": "#059669", "Class 4": "#d97706", "Class 5": "#dc2626", "Class 6": "#4f46e5", "Class 7": "#0891b2", "Class 8": "#0d9488" };
