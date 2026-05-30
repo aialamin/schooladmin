@@ -2,7 +2,7 @@
 
 A full-stack school management system covering students, staff, fees, marks, attendance, leave management, classrooms, and expenses. Runs as a **web app** (Render.com / any Node host) or a **one-click Windows desktop app** (Electron + embedded MongoDB — no server or internet required).
 
-**Version:** 1.5.0 &nbsp;·&nbsp; **Stack:** React 18 · Express · MongoDB · Electron
+**Version:** 1.6.0 &nbsp;·&nbsp; **Stack:** React 18 · Express · MongoDB · Electron
 
 ---
 
@@ -125,6 +125,23 @@ A full-stack school management system covering students, staff, fees, marks, att
 - **List view** — searchable DataTable for bulk management
 - **Class picker dropdown** to switch between all 22 classes
 - Overlap detection (same teacher or same room at the same time)
+
+### Subject Management
+- Admin configures which subjects each class studies from the Administration panel
+- Grouped class picker — classes organized by category: Pre-Primary, Primary (Class 1–5), Junior (Class 6–8), Science, Arts, Commerce
+- After selecting a class, only that category's subjects are shown as checkboxes — no noise from other groups
+- Add custom subjects not in the standard catalog for any class
+- Configurations persist to MongoDB; the marks entry modal and result cards use the saved subject list for each class
+- Reset any class back to the default catalog subjects at any time
+
+### Annual Student Promotion
+- Every **January 1st** the system automatically promotes students who passed to the next class
+- Class progression: Play → Nursery → KG → Class 1 → … → Class 8 → Class 9 Science → … → Class 12 → Graduate
+- Class 12 graduates are marked inactive; all others move to the next class and are assigned to the matching section teacher in the next class
+- Admin can **preview** the promotion before running it — see exactly who will be promoted, graduated, or held back
+- **Manual trigger** available any time from Administration → Promotion; same logic as the automatic run
+- Pass mark threshold is configurable (default 33%)
+- Zero external npm dependencies — scheduler uses pure Node.js `setTimeout`
 
 ### School Settings
 - School name, short name, subtitle, address, phone, email, website
@@ -402,7 +419,9 @@ All routes return JSON. Protected routes require `Authorization: Bearer <token>`
 | GET/POST | `/api/routines` | Bearer | Class timetables |
 | GET/POST | `/api/sections` | Bearer | Class sections |
 | GET/POST | `/api/classrooms` | Bearer | Classrooms with shift assignments |
-| GET/PUT | `/api/school-settings` | Bearer | School profile and report settings |
+| GET/PUT | `/api/school-settings` | Bearer | School profile, report settings, and class subjects config |
+| GET | `/api/promotion/preview` | Bearer (admin) | Preview which students will be promoted / graduated / held back |
+| POST | `/api/promotion/run` | Bearer (admin) | Run annual promotion now (same logic as Jan 1 auto-run) |
 | GET/POST | `/api/users` | Bearer (admin) | User account management |
 | GET | `/api/dashboard` | Bearer | Dashboard metrics |
 | GET | `/api/db-config` | Bearer (admin) | Get current DB connection info |
@@ -645,6 +664,18 @@ All high-traffic queries are backed by Mongoose indexes:
 ---
 
 ## Changelog
+
+### v1.6.0 — Auto-Promotion · Subject Management · Marks Section Filter · All-class Demo Data
+
+- **Annual student auto-promotion** — every January 1st at 00:05 the server checks which active students passed (score ≥ pass mark) and moves them to the next class in the progression map. Class 12 graduates are marked inactive. Matching section name is preserved (Boys section stays Boys section in the next class). Zero external npm dependencies — pure Node.js `setTimeout` scheduler.
+- **Admin Promotion UI** — `Administration → Promotion` page: year selector, configurable pass-mark %, **Preview** button (shows promoted / graduated / held-back tables before committing), **Run Promotion** button with confirmation. Dashboard refreshes student data automatically after a run.
+- **Subject Management redesign** — replaced the all-groups-at-once checkbox wall with a compact grouped class picker (coloured chip buttons by category). Selecting a class hides the picker and shows only the relevant catalog group (e.g. Class 3 → Primary subjects only; Class 9 Science → Science subjects only). Custom subjects and a Save button are shown below. Back button returns to the class picker.
+- **Marks section filter fixed** — `data.sections.find((s) => s._id === marksSectionFilter)` was comparing a Mongoose ObjectId against a string — strict `===` never matched. Fixed to `String(s._id) === marksSectionFilter` in two places (filter lookup + breadcrumb label).
+- **Section picker in Enter Marks modal** — after selecting a class, a second dropdown appears showing that class's sections. Selecting a section filters the student list to only that section's students, making bulk mark entry much faster for large classes.
+- **All-class demo data** — marks were previously seeded for Class 6 and Class 7 only. Now every student in every demo class (Play → Class 10 Science, 130 students) gets: Semester 1 at 100% contribution (50–89 range, all pass), Monthly exam 1 (reference, 0%), and a March class test (0%).
+- **`classSubjectsConfig` persistence** — SchoolSetting model gains a `Map<string, string[]>` field; controller serialises it to plain object for JSON; Subject Management saves and loads correctly.
+- **`allowedClasses` on Employee** — teacher multi-class access list persisted to MongoDB and survives profile edits.
+- **Promotion API** — `GET /api/promotion/preview` and `POST /api/promotion/run` (admin only).
 
 ### v1.5.0 — Cashier role · SVG icon system · Role-aware mobile nav
 

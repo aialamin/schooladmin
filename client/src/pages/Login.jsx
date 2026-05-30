@@ -19,21 +19,21 @@ const pillars = [
     bg: "#eef4ff",
     color: "#155eef",
     title: "Academic at the core",
-    text: "Student enrollment, class sections, marks entry, weighted result cards with class positions, timetables with conflict detection, and PDF reports — built in.",
+    text: "Student enrollment, class sections, marks entry (section-filtered), weighted result cards with class positions, annual auto-promotion, subject management per class, and PDF reports — all built in.",
   },
   {
     icon: "payment",
     bg: "#ecfdf5",
     color: "#047857",
     title: "Finance, fully handled",
-    text: "Fee structures per class, bulk payment generation, per-student due tracking, monthly salary ledger with increment history, and school expense logging.",
+    text: "Fee structures per class, bulk payment generation, per-student due tracking, monthly salary ledger with increment history, cashier payment terminal, and school expense logging.",
   },
   {
     icon: "roles",
     bg: "#f5f3ff",
     color: "#7c3aed",
     title: "Every role, perfectly scoped",
-    text: "8 dedicated portals — admin, teacher, accountant, accounts, cashier, staff, student, and audit. Each user sees only what their role needs — nothing more.",
+    text: "8 dedicated portals — admin, teacher, accountant, accounts, cashier, staff, student, and audit. Each user sees only what their role needs. Deploy to cloud or run offline on Windows.",
   },
 ];
 
@@ -46,11 +46,13 @@ const featureGroups = [
   { icon: "teacher",   title: "Class Teacher Portal",        text: "Teachers access only their assigned class — students, marks entry, routines, and result cards are fully scoped. No cross-section data visible." },
   { icon: "staff",     title: "Employee Management",         text: "Staff profiles with role, salary type, joining date, and status. People overview shows teacher count, monthly salary bill, and role breakdown cards." },
   { icon: "salary",    title: "Salaries & Increments",       text: "Record monthly salary payments and bulk-generate for all employees in one click. Pay a single employee's full dues with one click including an optional bonus." },
-  { icon: "result",    title: "Marks & Result Cards",        text: "Enter marks by subject and exam type. Weighted scores, class positions, and PDF-ready result cards with filter by class, teacher, student, and exam." },
+  { icon: "result",    title: "Marks & Result Cards",        text: "Enter marks by subject, exam type, and section. Weighted scores, class positions, and PDF-ready result cards with filter by class, section, teacher, student, and exam." },
+  { icon: "promote",   title: "Auto-Promotion",              text: "Every January 1st, students who passed are automatically moved to the next class and assigned to the next class teacher. Preview before running, or trigger manually from admin." },
   { icon: "biometric", title: "Attendance",                  text: "Daily employee attendance: present, late, absent, leave, half-day. Manual, bulk, biometric scan (WebAuthn / ZKTeco), and monthly grid view." },
   { icon: "expense",   title: "Expenses",                    text: "Log school costs with title, category, amount, paid-to, and payment method. Nine categories, monthly + category filter, and totals breakdown." },
   { icon: "workflow",  title: "Leave & Absence Management",  text: "Teachers and staff submit leave applications with date range, substitute teacher assignments per class period, and reason. Admins approve or reject with a review note." },
   { icon: "routine",   title: "Class Routines",              text: "Timetable entries per class: day, subject, teacher, room, start and end time. Overlap detection prevents double-booking the same teacher or room. 792 entries seeded." },
+  { icon: "settings",  title: "Subject Management",          text: "Configure which subjects each class studies. Select from Pre-Primary, Primary, Junior, Science, Arts, or Commerce catalogs — or add custom subjects per class." },
   { icon: "settings",  title: "School Settings",             text: "Configure school name, logos, academic year, exam title, pass mark, principal name, admission notice, support email, and result remarks." },
   { icon: "database",  title: "Database Configuration",      text: "Each school connects their own MongoDB URI from Settings. Test, save, and the server reconnects live with accounts auto-seeded into any fresh database." },
 ];
@@ -67,19 +69,39 @@ const rolesList = [
 ];
 
 const workflowSteps = [
-  "Create classes, sections, and fee rules",
-  "Add employees and assign class teachers",
-  "Enrol students with guardian details",
-  "Cashier collects fees and prints receipts at front desk",
-  "Teachers enter marks and submit leave applications",
-  "Admins approve leaves, process salaries, and track expenses",
-  "Print result cards, salary slips, and monthly reports",
+  "Configure classes, sections, subjects, and fee rules",
+  "Add employees and assign class teachers per section",
+  "Enrol students with guardian details and section assignment",
+  "Cashier collects fees at front desk and prints REC receipts",
+  "Teachers enter marks section-by-section and apply for leave",
+  "Admins approve leaves, process bulk salaries, and track expenses",
+  "Print result cards and monthly reports",
+  "On January 1st — passing students auto-promote to the next class",
 ];
 
 const metrics = [
-  { value: "8",    label: "Role portals" },
-  { value: "15+",  label: "Feature modules" },
-  { value: "100%", label: "Offline ready" },
+  { value: "8",    label: "Role portals"    },
+  { value: "17+",  label: "Feature modules" },
+  { value: "22",   label: "Classes covered" },
+  { value: "100%", label: "Offline ready"   },
+];
+
+const techStack = [
+  { label: "React 18",   color: "#0ea5e9" },
+  { label: "Node.js",    color: "#22c55e" },
+  { label: "MongoDB",    color: "#16a34a" },
+  { label: "Express",    color: "#64748b" },
+  { label: "Electron",   color: "#7c3aed" },
+  { label: "Vite 6",     color: "#f59e0b" },
+];
+
+const systemStats = [
+  { value: "22",  label: "Classes",             sub: "Play → Class 12 (Science / Arts / Commerce)" },
+  { value: "792", label: "Routine entries",      sub: "Auto-seeded — 6 days × 6 periods × 22 classes" },
+  { value: "8",   label: "User roles",           sub: "Each with its own scoped portal" },
+  { value: "Jan 1", label: "Auto-promotion",     sub: "Passing students move to next class automatically" },
+  { value: "A5",  label: "PDF receipts",         sub: "Auto-printed after every cashier payment" },
+  { value: "0",   label: "External npm for cron",sub: "Annual scheduler uses pure Node.js timers" },
 ];
 
 function Icon({ name }) {
@@ -104,6 +126,7 @@ function Icon({ name }) {
     settings:  <><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z" /></>,
     database:  <><ellipse cx="12" cy="5" rx="9" ry="3" /><path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5" /><path d="M3 12c0 1.66 4.03 3 9 3s9-1.34 9-3" /></>,
     roles:     <><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></>,
+    promote:   <><path d="M12 20V9"/><path d="m8 13 4-4 4 4"/><path d="M5 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-1"/></>,
   };
   return <svg className="home-icon" {...props}>{paths[name] || paths.student}</svg>;
 }
@@ -207,9 +230,9 @@ export default function Login({ onLogin }) {
       {/* ── Hero ──────────────────────────────────────────────── */}
       <section className="pro-hero login-first-hero overflow-hidden" id="home">
         <div className="pro-hero-copy">
-          <p className="pro-eyebrow">v1.5.0 &nbsp;·&nbsp; Production Ready</p>
+          <p className="pro-eyebrow">v1.6.0 &nbsp;·&nbsp; Production Ready</p>
           <h1>Run Your School From <em className="hero-highlight">One Dashboard</em></h1>
-          <p>Every workflow your campus needs — students, fees, marks, staff, attendance, leave management, and expenses. Eight role-specific portals keep each user focused. Deploy to the cloud or run offline on Windows.</p>
+          <p>Every workflow your campus needs — students, fees, marks, attendance, leave, expenses, and annual auto-promotion. 8 role-specific portals keep each user focused. Deploy to the cloud or run offline on Windows with a one-click installer.</p>
           <div className="pro-hero-actions flex flex-wrap gap-3">
             <a className="pro-primary-link transition hover:-translate-y-0.5" href="#login">Try the Demo</a>
             <a className="pro-secondary-link border-white/25 bg-white/95 transition hover:-translate-y-0.5" href="#features">See All Features</a>
@@ -283,12 +306,25 @@ export default function Login({ onLogin }) {
         </div>
       </section>
 
+      {/* ── System stats strip ────────────────────────────────── */}
+      <section style={{ background:"#f8fafc", borderTop:"1px solid #e2e8f0", borderBottom:"1px solid #e2e8f0", padding:"28px 24px" }}>
+        <div style={{ maxWidth:1080, margin:"0 auto", display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))", gap:20 }}>
+          {systemStats.map((s) => (
+            <div key={s.label} style={{ textAlign:"center" }}>
+              <div style={{ fontSize:26, fontWeight:800, color:"#1e293b", lineHeight:1.1 }}>{s.value}</div>
+              <div style={{ fontSize:13, fontWeight:700, color:"#334155", marginTop:4 }}>{s.label}</div>
+              <div style={{ fontSize:11, color:"#94a3b8", marginTop:2, lineHeight:1.4 }}>{s.sub}</div>
+            </div>
+          ))}
+        </div>
+      </section>
+
       {/* ── Feature modules ───────────────────────────────────── */}
       <section className="pro-section feature-overview" id="features">
         <div className="pro-section-head section-head-center">
           <p>Built-in Modules</p>
           <h2>All the tools. None of the complexity.</h2>
-          <span>15 modules covering every academic, finance, HR, and operations workflow — no plugins, no extra subscriptions, no third-party integrations.</span>
+          <span>17 modules covering every academic, finance, HR, and operations workflow — no plugins, no extra subscriptions, no third-party integrations required.</span>
         </div>
         <div className="pro-feature-grid">
           {featureGroups.map((feature) => (
@@ -324,7 +360,7 @@ export default function Login({ onLogin }) {
         <div className="workflow-panel border border-slate-200/70 shadow-xl">
           <div className="pro-section-head compact">
             <p>Setup Guide</p>
-            <h2>Up and running in five steps</h2>
+            <h2>Up and running in eight steps</h2>
           </div>
           <div className="workflow-list">
             {workflowSteps.map((step, i) => (
@@ -341,11 +377,26 @@ export default function Login({ onLogin }) {
         </div>
       </section>
 
+      {/* ── Tech stack strip ──────────────────────────────────── */}
+      <section style={{ background:"#0f172a", padding:"32px 24px" }}>
+        <div style={{ maxWidth:900, margin:"0 auto", textAlign:"center" }}>
+          <p style={{ fontSize:11, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.1em", color:"#64748b", marginBottom:16 }}>Built with</p>
+          <div style={{ display:"flex", flexWrap:"wrap", justifyContent:"center", gap:10 }}>
+            {techStack.map((t) => (
+              <span key={t.label} style={{ padding:"6px 18px", borderRadius:999, fontSize:13, fontWeight:700, border:`1.5px solid ${t.color}40`, color:t.color, background:`${t.color}15` }}>{t.label}</span>
+            ))}
+          </div>
+          <p style={{ marginTop:18, fontSize:12, color:"#475569", lineHeight:1.6 }}>
+            Full-stack SPA · Gzip-compressed API · JWT auth · MongoDB Atlas or embedded · One-click Windows installer · Biometric WebAuthn attendance
+          </p>
+        </div>
+      </section>
+
       {/* ── Footer ────────────────────────────────────────────── */}
       <footer className="pro-home-footer footer-with-owner bg-slate-950" id="contact">
         <div>
           <strong>School Manager</strong>
-          <span>Professional school management — v1.5.0 · React 18 · Node.js · MongoDB · Electron.</span>
+          <span>Professional school management — v1.6.0 · React 18 · Node.js · MongoDB · Electron.</span>
         </div>
         <div className="footer-owner">
           <img alt="Md. Al Amin Hossain" decoding="async" loading="lazy" src="/owner-alamin-small.jpg" />
