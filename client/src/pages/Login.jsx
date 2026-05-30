@@ -187,7 +187,7 @@ export default function Login({ onLogin }) {
     <main className={isHomeMenuOpen ? "landing-page pro-home home-menu-open min-h-screen bg-slate-50 text-slate-950" : "landing-page pro-home min-h-screen bg-slate-50 text-slate-950"}>
 
       {/* ── Header ────────────────────────────────────────────── */}
-      <header className="pro-home-header border-b border-slate-200/80 bg-white/90 shadow-sm backdrop-blur-xl">
+      <header className="pro-home-header border-b border-slate-200/80 bg-white/90 shadow-sm backdrop-blur-xl" style={{ position:"sticky", top:0, zIndex:120 }}>
         <a className="pro-brand" href="#home" aria-label="School Manager home">
           <span className="brand-logo-mark shadow-lg shadow-blue-600/20"><img alt="" src="/app-logo.png" /></span>
           <div>

@@ -71,10 +71,10 @@ textarea {
   }
 
   .table-card th {
-    @apply bg-slate-50 text-[11px] font-black uppercase tracking-[0.055em] text-slate-500;
+    @apply bg-slate-50 text-[11px] font-medium uppercase tracking-[0.09em] text-slate-400;
   }
 
   .table-card td {
-    @apply text-sm leading-6 text-slate-700;
+    @apply text-sm leading-6 text-slate-600;
   }
 }

@@ -192,8 +192,8 @@ function SectionHeader({ action, eyebrow, title }) {
   return (
     <div className="section-header rounded-[22px] border border-white/70 bg-white/75 p-5 shadow-[0_18px_50px_rgba(15,23,42,0.08)] backdrop-blur-xl">
       <div>
-        <p className="text-xs font-black uppercase tracking-[0.12em] text-blue-600">{eyebrow}</p>
-        <h2 className="mt-2 text-2xl font-extrabold leading-tight text-slate-950 md:text-3xl">{title}</h2>
+        <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-blue-600">{eyebrow}</p>
+        <h2 className="mt-2 text-2xl font-bold leading-tight text-slate-800 md:text-3xl">{title}</h2>
       </div>
       <div className="action-row flex flex-wrap items-center gap-2">{action}</div>
     </div>
@@ -928,6 +928,8 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
   // Admin settings panels
   const [teacherAccessOpen, setTeacherAccessOpen] = useState(false);
   const [teacherAccessSaving, setTeacherAccessSaving] = useState({}); // { employeeId: true }
+  const [teacherAccessSearch, setTeacherAccessSearch] = useState("");
+  const [teacherAccessSelected, setTeacherAccessSelected] = useState(null);
   const [subjectMgmtOpen, setSubjectMgmtOpen] = useState(false);
   const [subjectMgmtClass, setSubjectMgmtClass] = useState(""); // selected class in subject mgmt
   const [subjectMgmtDraft, setSubjectMgmtDraft] = useState({}); // local draft { className: [subjects] }
@@ -4809,82 +4811,175 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
       return n(a) - n(b) || a.localeCompare(b);
     });
 
+    const filteredTeachers = teachers.filter((t) => {
+      const q = teacherAccessSearch.toLowerCase();
+      return !q || t.name.toLowerCase().includes(q) || (t.contactInfo?.email || "").toLowerCase().includes(q) || (t.assignedClass || "").toLowerCase().includes(q);
+    });
+
+    const selectedTeacher = teachers.find((t) => t._id === teacherAccessSelected) || null;
+    const draftKey = selectedTeacher ? `ta-${selectedTeacher._id}` : null;
+    // assignedClass is ALWAYS part of the allowed set — it's the teacher's primary class
+    const currentAllowed = selectedTeacher
+      ? new Set([
+          ...(Array.isArray(selectedTeacher.allowedClasses) ? selectedTeacher.allowedClasses : []),
+          ...(selectedTeacher.assignedClass ? [selectedTeacher.assignedClass] : []),
+        ])
+      : new Set();
+    const draftSet = (draftKey && userAccountDrafts[draftKey]?.allowedClasses)
+      ? new Set(userAccountDrafts[draftKey].allowedClasses)
+      : new Set(currentAllowed);
+    const isDirty = !!selectedTeacher && JSON.stringify([...draftSet].sort()) !== JSON.stringify([...currentAllowed].sort());
+
+    const toggleCls = (cls) => {
+      if (!draftKey) return;
+      const next = new Set(draftSet);
+      if (next.has(cls)) next.delete(cls); else next.add(cls);
+      setUserAccountDrafts((prev) => ({ ...prev, [draftKey]: { allowedClasses: [...next] } }));
+    };
+
+    const handleSave = async () => {
+      if (!selectedTeacher || !draftKey) return;
+      const newAllowed = [...new Set(userAccountDrafts[draftKey]?.allowedClasses ?? [...currentAllowed])];
+      setTeacherAccessSaving((p) => ({ ...p, [selectedTeacher._id]: true }));
+      try {
+        await erpApi.updateEmployee(token, selectedTeacher._id, {
+          name: selectedTeacher.name,
+          role: selectedTeacher.role,
+          assignedClass: selectedTeacher.assignedClass || "",
+          phone: selectedTeacher.contactInfo?.phone || "",
+          email: selectedTeacher.contactInfo?.email || "",
+          address: selectedTeacher.contactInfo?.address || "",
+          allowedClasses: newAllowed,
+        });
+        const partial = await refreshPartialData(token, ["employees"]);
+        setData((prev) => ({ ...prev, ...partial }));
+        showDoneAlert(`Access updated for ${selectedTeacher.name}.`);
+      } catch (err) { setError(getErrorMessage(err)); }
+      finally { setTeacherAccessSaving((p) => ({ ...p, [selectedTeacher._id]: false })); }
+    };
+
     return (
       <div className="stack">
         <SectionHeader eyebrow="Administration" title="Teacher Class Access"
-          action={<p style={{ margin:0, fontSize:13, color:"var(--edu-muted)" }}>Check the classes each teacher can view and enter marks for. Changes are saved per teacher.</p>}
+          action={<p style={{ margin:0, fontSize:13, color:"var(--edu-muted)" }}>Select a teacher to view and edit their class access permissions.</p>}
         />
+
         {teachers.length === 0 ? (
           <div className="info-card"><h3>No teachers found</h3><p>Add employees with role "teacher" first.</p></div>
         ) : (
-          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(320px,1fr))", gap:"16px" }}>
-            {teachers.map((emp) => {
-              const currentAllowed = new Set(Array.isArray(emp.allowedClasses) ? emp.allowedClasses : (emp.assignedClass ? [emp.assignedClass] : []));
-              const draftKey = `ta-${emp._id}`;
-              const draftSet = userAccountDrafts[draftKey]?.allowedClasses ? new Set(userAccountDrafts[draftKey].allowedClasses) : currentAllowed;
-              const isDirty = JSON.stringify([...draftSet].sort()) !== JSON.stringify([...currentAllowed].sort());
+          <>
+            {/* ── Search + Dropdown row ── */}
+            <div style={{ display:"flex", gap:12, flexWrap:"wrap", alignItems:"center" }}>
+              {/* Search input */}
+              <div style={{ position:"relative", flex:"1 1 180px", minWidth:150 }}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                  style={{ position:"absolute", left:10, top:"50%", transform:"translateY(-50%)", width:15, height:15, color:"var(--edu-muted)", pointerEvents:"none" }}>
+                  <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+                </svg>
+                <input type="text" placeholder="Search teacher…" value={teacherAccessSearch}
+                  onChange={(e) => setTeacherAccessSearch(e.target.value)}
+                  style={{ width:"100%", padding:"9px 12px 9px 32px", borderRadius:10, border:"1.5px solid var(--app-border,#e2e8f0)", background:"var(--app-elevated)", color:"var(--app-text)", fontSize:13, outline:"none", boxSizing:"border-box" }}
+                />
+              </div>
 
-              const toggleCls = (cls) => {
-                const next = new Set(draftSet);
-                if (next.has(cls)) next.delete(cls); else next.add(cls);
-                setUserAccountDrafts((prev) => ({ ...prev, [draftKey]:{ allowedClasses:[...next] } }));
-              };
+              {/* Teacher dropdown */}
+              <select value={teacherAccessSelected || ""}
+                onChange={(e) => {
+                  setTeacherAccessSelected(e.target.value || null);
+                }}
+                style={{ flex:"1 1 220px", minWidth:180, padding:"9px 12px", borderRadius:10, border:"1.5px solid var(--app-border,#e2e8f0)", background:"var(--app-elevated)", color:"var(--app-text)", fontSize:13, cursor:"pointer", outline:"none" }}>
+                <option value="">— Select a teacher —</option>
+                {filteredTeachers.map((t) => (
+                  <option key={t._id} value={t._id}>{t.name}{t.assignedClass ? ` (${t.assignedClass})` : ""}</option>
+                ))}
+              </select>
 
-              const handleSave = async () => {
-                const newAllowed = userAccountDrafts[draftKey]?.allowedClasses ?? [...currentAllowed];
-                setTeacherAccessSaving((p) => ({ ...p, [emp._id]:true }));
-                try {
-                  await erpApi.updateEmployee(token, emp._id, {
-                    ...emp, phone:emp.contactInfo?.phone||"", email:emp.contactInfo?.email||"", address:emp.contactInfo?.address||"",
-                    allowedClasses:newAllowed,
-                  });
-                  const partial = await refreshPartialData(token, ["employees"]);
-                  setData((prev) => ({ ...prev, ...partial }));
-                  showDoneAlert(`Access updated for ${emp.name}.`);
-                } catch (err) { setError(getErrorMessage(err)); }
-                finally { setTeacherAccessSaving((p) => ({ ...p, [emp._id]:false })); }
-              };
+              {/* Summary badge */}
+              {selectedTeacher && (
+                <span style={{ fontSize:12, fontWeight:700, padding:"6px 12px", borderRadius:20, background:"color-mix(in srgb,var(--app-success,#10b981) 14%,var(--app-surface))", color:"var(--app-success,#10b981)", whiteSpace:"nowrap" }}>
+                  {draftSet.size} class{draftSet.size !== 1 ? "es" : ""} selected
+                </span>
+              )}
+            </div>
 
-              return (
-                <div key={emp._id} className="panel" style={{ padding:"20px", display:"flex", flexDirection:"column", gap:16 }}>
-                  {/* Teacher header */}
-                  <div style={{ display:"flex", alignItems:"center", gap:12 }}>
-                    <div style={{ width:42, height:42, borderRadius:"50%", background:"linear-gradient(135deg,#10b981,#059669)", color:"#fff", display:"grid", placeItems:"center", flexShrink:0 }}>
-                      <DashboardIcon name="users" style={{ width:20, height:20 }} />
-                    </div>
-                    <div style={{ minWidth:0 }}>
-                      <strong style={{ display:"block", fontSize:15 }}>{emp.name}</strong>
-                      <small style={{ color:"var(--edu-muted)", fontSize:12 }}>{emp.contactInfo?.email || emp.email || emp.assignedClass || "Teacher"}</small>
-                    </div>
+            {/* ── Access Table ── */}
+            {selectedTeacher ? (
+              <div className="panel" style={{ padding:0, overflow:"hidden" }}>
+                {/* Teacher info header */}
+                <div style={{ display:"flex", alignItems:"center", gap:12, padding:"16px 20px", borderBottom:"1px solid var(--app-border)" }}>
+                  <div style={{ width:38, height:38, borderRadius:12, background:"color-mix(in srgb,#6366f1 14%,var(--app-surface,#f8fafc))", border:"1.5px solid color-mix(in srgb,#6366f1 22%,transparent)", color:"#6366f1", display:"grid", placeItems:"center", flexShrink:0, fontWeight:700, fontSize:15, letterSpacing:"-0.01em" }}>
+                    {selectedTeacher.name.trim().charAt(0).toUpperCase()}
                   </div>
+                  <div style={{ minWidth:0 }}>
+                    <strong style={{ fontSize:15, display:"block" }}>{selectedTeacher.name}</strong>
+                    <small style={{ color:"var(--edu-muted)", fontSize:12 }}>{selectedTeacher.contactInfo?.email || selectedTeacher.assignedClass || "Teacher"}</small>
+                  </div>
+                  <div style={{ marginLeft:"auto", display:"flex", gap:8, flexShrink:0 }}>
+                    <button type="button" className="btn soft" style={{ fontSize:12, padding:"5px 12px" }}
+                      onClick={() => setUserAccountDrafts((prev) => ({ ...prev, [`ta-${selectedTeacher._id}`]: { allowedClasses: [...allClasses] } }))}>
+                      Select All
+                    </button>
+                    <button type="button" className="btn soft" style={{ fontSize:12, padding:"5px 12px" }}
+                      onClick={() => setUserAccountDrafts((prev) => ({ ...prev, [`ta-${selectedTeacher._id}`]: { allowedClasses: [] } }))}>
+                      Clear All
+                    </button>
+                  </div>
+                </div>
 
-                  {/* Class checkboxes */}
-                  {allClasses.length === 0 ? (
-                    <p style={{ margin:0, fontSize:13, color:"var(--edu-muted)" }}>No classes found. Add students first.</p>
-                  ) : (
-                    <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(110px,1fr))", gap:8 }}>
+                {/* Class rows */}
+                {allClasses.length === 0 ? (
+                  <p style={{ padding:"24px 20px", margin:0, color:"var(--edu-muted)", fontSize:13 }}>No classes found. Add students first.</p>
+                ) : (
+                  <table style={{ width:"100%", borderCollapse:"collapse" }}>
+                    <thead>
+                      <tr style={{ background:"var(--app-bg-soft,color-mix(in srgb,var(--app-surface) 60%,transparent))" }}>
+                        <th style={{ padding:"10px 20px", textAlign:"left",   fontSize:11, fontWeight:700, color:"var(--edu-muted)", textTransform:"uppercase", letterSpacing:".05em" }}>Class</th>
+                        <th style={{ padding:"10px 20px", textAlign:"center", fontSize:11, fontWeight:700, color:"var(--edu-muted)", textTransform:"uppercase", letterSpacing:".05em", width:80 }}>Access</th>
+                        <th style={{ padding:"10px 20px", textAlign:"left",   fontSize:11, fontWeight:700, color:"var(--edu-muted)", textTransform:"uppercase", letterSpacing:".05em" }}>Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
                       {allClasses.map((cls) => {
                         const checked = draftSet.has(cls);
                         return (
-                          <label key={cls} style={{ display:"flex", alignItems:"center", gap:7, padding:"7px 10px", borderRadius:8, cursor:"pointer", fontSize:13, fontWeight: checked ? 700 : 500, background: checked ? "color-mix(in srgb,var(--app-success,#10b981) 12%,var(--app-surface,#fff))" : "var(--edu-bg-alt,#f8fafc)", border:`1.5px solid ${checked ? "var(--app-success,#10b981)" : "var(--edu-border,#e2e8f0)"}`, transition:"all 0.15s", userSelect:"none" }}>
-                            <input type="checkbox" checked={checked} onChange={() => toggleCls(cls)} style={{ width:15, height:15, cursor:"pointer", accentColor:"var(--app-success,#10b981)", flexShrink:0 }} />
-                            <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{cls}</span>
-                          </label>
+                          <tr key={cls} onClick={() => toggleCls(cls)} style={{ borderTop:"1px solid var(--app-border)", background: checked ? "color-mix(in srgb,var(--app-success,#10b981) 7%,var(--app-elevated))" : "transparent", cursor:"pointer", transition:"background 0.13s" }}>
+                            <td style={{ padding:"13px 20px", fontWeight:600, fontSize:14, color:"var(--app-heading)" }}>{cls}</td>
+                            <td style={{ padding:"13px 20px", textAlign:"center" }}>
+                              <input type="checkbox" checked={checked} onChange={() => toggleCls(cls)}
+                                onClick={(e) => e.stopPropagation()}
+                                style={{ width:17, height:17, cursor:"pointer", accentColor:"var(--app-success,#10b981)" }} />
+                            </td>
+                            <td style={{ padding:"13px 20px" }}>
+                              {checked
+                                ? <span style={{ fontSize:12, fontWeight:700, color:"var(--app-success,#10b981)" }}>✓ Allowed</span>
+                                : <span style={{ fontSize:12, color:"var(--edu-muted)" }}>—</span>
+                              }
+                            </td>
+                          </tr>
                         );
                       })}
-                    </div>
-                  )}
+                    </tbody>
+                  </table>
+                )}
 
-                  {/* Save */}
-                  <button type="button" className={`btn ${isDirty ? "success" : "soft"}`} style={{ width:"100%", fontWeight:700, fontSize:13 }}
-                    disabled={teacherAccessSaving[emp._id] || !isDirty}
+                {/* Save footer */}
+                <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"14px 20px", borderTop:"1px solid var(--app-border)", gap:12, flexWrap:"wrap" }}>
+                  <span style={{ fontSize:13, color:"var(--edu-muted)" }}>
+                    {isDirty ? "You have unsaved changes." : "No changes to save."}
+                  </span>
+                  <button type="button" className={`btn ${isDirty ? "success" : "soft"}`} style={{ minWidth:140, fontWeight:700 }}
+                    disabled={teacherAccessSaving[selectedTeacher._id] || !isDirty}
                     onClick={handleSave}>
-                    {teacherAccessSaving[emp._id] ? "Saving…" : isDirty ? "Save Changes" : "Saved"}
+                    {teacherAccessSaving[selectedTeacher._id] ? "Saving…" : isDirty ? "Save Changes" : "Already Saved"}
                   </button>
                 </div>
-              );
-            })}
-          </div>
+              </div>
+            ) : (
+              <div className="info-card" style={{ textAlign:"center", padding:"40px 20px" }}>
+                <p style={{ margin:0, color:"var(--edu-muted)", fontSize:14 }}>Select a teacher from the dropdown above to manage their class access.</p>
+              </div>
+            )}
+          </>
         )}
       </div>
     );
@@ -5604,101 +5699,7 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
         );
       })()}
 
-      {/* ── Teacher Class Access Panel ── */}
-      {isAdmin && teacherAccessOpen && (() => {
-        const teachers = data.employees.filter((e) => e.role === "teacher");
-        const allClasses = [...new Set(data.students.map((s) => s.className).filter(Boolean))].sort();
-        return (
-          <section className="panel" style={{ padding:0, overflow:"hidden" }}>
-            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:16, padding:"18px 22px", borderBottom:"1px solid var(--ui-line,#e2e8f0)" }}>
-              <div style={{ display:"flex", alignItems:"center", gap:12 }}>
-                <span className="settings-icon" style={{ background:"linear-gradient(135deg,#10b981,#059669)", color:"#fff" }}><DashboardIcon name="users" /></span>
-                <div>
-                  <h3 style={{ margin:0, fontSize:16, fontWeight:700 }}>Teacher Class Access</h3>
-                  <p style={{ margin:"2px 0 0", fontSize:13, color:"var(--ui-muted,#64748b)" }}>Select which classes each teacher can view and enter marks for</p>
-                </div>
-              </div>
-              <button className="btn soft" type="button" style={{ fontSize:12 }} onClick={() => setTeacherAccessOpen(false)}>Close</button>
-            </div>
-            <div style={{ overflowX:"auto", WebkitOverflowScrolling:"touch" }}>
-              <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13, minWidth:Math.max(600, 200 + allClasses.length * 80) }}>
-                <thead>
-                  <tr style={{ borderBottom:"1px solid var(--ui-line,#e2e8f0)" }}>
-                    <th style={{ padding:"9px 14px", textAlign:"left", fontWeight:700, color:"var(--ui-muted,#64748b)", fontSize:11, textTransform:"uppercase", letterSpacing:"0.07em", minWidth:160 }}>Teacher</th>
-                    {allClasses.map((cls) => (
-                      <th key={cls} style={{ padding:"9px 8px", textAlign:"center", fontWeight:700, color:"var(--ui-muted,#64748b)", fontSize:10, textTransform:"uppercase", letterSpacing:"0.05em", whiteSpace:"nowrap", minWidth:72 }}>{cls}</th>
-                    ))}
-                    <th style={{ padding:"9px 14px", textAlign:"center", fontWeight:700, color:"var(--ui-muted,#64748b)", fontSize:11, textTransform:"uppercase", letterSpacing:"0.07em", whiteSpace:"nowrap" }}>Save</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {teachers.map((emp) => {
-                    const currentAllowed = Array.isArray(emp.allowedClasses) ? new Set(emp.allowedClasses) : (emp.assignedClass ? new Set([emp.assignedClass]) : new Set());
-                    const draftKey = `ta-${emp._id}`;
-                    const draftSet = userAccountDrafts[draftKey]?.allowedClasses
-                      ? new Set(userAccountDrafts[draftKey].allowedClasses)
-                      : currentAllowed;
-
-                    const toggleClass = (cls) => {
-                      const next = new Set(draftSet);
-                      if (next.has(cls)) { next.delete(cls); } else { next.add(cls); }
-                      setUserAccountDrafts((prev) => ({ ...prev, [draftKey]: { allowedClasses: [...next] } }));
-                    };
-
-                    return (
-                      <tr key={emp._id} style={{ borderBottom:"1px solid var(--ui-line,#f1f5f9)" }}>
-                        <td style={{ padding:"10px 14px", fontWeight:600, whiteSpace:"nowrap" }}>
-                          <div>{emp.name}</div>
-                          {emp.assignedClass && <small style={{ color:"var(--ui-muted,#64748b)", fontSize:11 }}>Primary: {emp.assignedClass}</small>}
-                        </td>
-                        {allClasses.map((cls) => (
-                          <td key={cls} style={{ padding:"8px", textAlign:"center" }}>
-                            <input
-                              type="checkbox"
-                              checked={draftSet.has(cls)}
-                              onChange={() => toggleClass(cls)}
-                              style={{ width:16, height:16, cursor:"pointer", accentColor:"#2563eb" }}
-                            />
-                          </td>
-                        ))}
-                        <td style={{ padding:"10px 14px", textAlign:"center" }}>
-                          <button
-                            type="button"
-                            className="btn primary"
-                            style={{ fontSize:11.5, padding:"4px 12px", minHeight:30 }}
-                            disabled={teacherAccessSaving[emp._id]}
-                            onClick={async () => {
-                              const newAllowed = userAccountDrafts[draftKey]?.allowedClasses ?? [...currentAllowed];
-                              setTeacherAccessSaving((p) => ({ ...p, [emp._id]: true }));
-                              try {
-                                await erpApi.updateEmployee(token, emp._id, {
-                                  ...emp,
-                                  phone: emp.contactInfo?.phone || "",
-                                  email: emp.contactInfo?.email || "",
-                                  address: emp.contactInfo?.address || "",
-                                  allowedClasses: newAllowed,
-                                });
-                                const partial = await refreshPartialData(token, ["employees"]);
-                                setData((prev) => ({ ...prev, ...partial }));
-                                showDoneAlert(`Access updated for ${emp.name}.`);
-                              } catch (err) { setError(getErrorMessage(err)); }
-                              finally { setTeacherAccessSaving((p) => ({ ...p, [emp._id]: false })); }
-                            }}>
-                            {teacherAccessSaving[emp._id] ? "…" : "Save"}
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                  {teachers.length === 0 && (
-                    <tr><td colSpan={allClasses.length + 2} style={{ padding:"16px 14px", color:"var(--ui-muted,#64748b)", fontSize:13 }}>No teachers found. Add employees with role "teacher" first.</td></tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </section>
-        );
-      })()}
+      {/* ── Teacher Class Access Panel (legacy floating removed — now a full page view) ── */}
 
       {/* ── Subject Management Panel ── */}
       {isAdmin && subjectMgmtOpen && (() => {
