@@ -19,6 +19,7 @@ const DEFAULT_SETTINGS = {
   admissionNotice: "Admission open. Contact school office for details.",
   principalName: "Principal",
   resultRemarksDefault: "She/He has been consistently progressing.",
+  classSubjectsConfig: {},
 };
 
 const editableFields = Object.keys(DEFAULT_SETTINGS);
@@ -43,7 +44,11 @@ function cleanValue(field, value) {
 async function getSchoolSettings(_req, res, next) {
   try {
     const settings = await getOrCreateSettings();
-    return res.json({ settings });
+    const plain = settings.toObject();
+    if (plain.classSubjectsConfig instanceof Map) {
+      plain.classSubjectsConfig = Object.fromEntries(plain.classSubjectsConfig);
+    }
+    return res.json({ settings: plain });
   } catch (error) {
     return next(error);
   }
@@ -58,12 +63,25 @@ async function updateSchoolSettings(req, res, next) {
       }
     });
 
+    // classSubjectsConfig is a Map<className, string[]> — handle separately
+    if (req.body.classSubjectsConfig !== undefined) {
+      const raw = req.body.classSubjectsConfig;
+      if (typeof raw === "object" && raw !== null && !Array.isArray(raw)) {
+        settings.classSubjectsConfig = raw;
+      }
+    }
+
     if (!settings.schoolName) {
       return res.status(400).json({ message: "School name is required." });
     }
 
     await settings.save();
-    return res.json({ message: "School settings updated.", settings });
+    // Convert Map to plain object for JSON serialisation
+    const plain = settings.toObject();
+    if (plain.classSubjectsConfig instanceof Map) {
+      plain.classSubjectsConfig = Object.fromEntries(plain.classSubjectsConfig);
+    }
+    return res.json({ message: "School settings updated.", settings: plain });
   } catch (error) {
     return next(error);
   }

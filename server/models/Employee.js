@@ -55,6 +55,8 @@ const employeeSchema = new mongoose.Schema(
       email: { type: String, default: "", lowercase: true, trim: true },
       address: { type: String, default: "", trim: true },
     },
+    // Multi-class access list for teachers (admin-managed)
+    allowedClasses: [{ type: String, trim: true }],
     // ── WebAuthn / biometric credentials for attendance check-in ────────────
     biometricCredentials: [
       {

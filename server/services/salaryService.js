@@ -58,20 +58,26 @@ async function updateEmployee(id, payload) {
     throw new Error("Employee name is required.");
   }
 
+  const updateDoc = {
+    name,
+    role: payload.role || "teacher",
+    salaryType: payload.salaryType || "monthly",
+    salaryAmount: normalizeMoney(payload.salaryAmount),
+    assignedClass: cleanString(payload.assignedClass),
+    isClassTeacher: Boolean(payload.isClassTeacher) && payload.role === "teacher",
+    subject: cleanString(payload.subject),
+    joiningDate: payload.joiningDate || new Date(),
+    status: payload.status || "active",
+    contactInfo: normalizeContactInfo(payload.contactInfo),
+  };
+  // allowedClasses: array of className strings for multi-class teacher access
+  if (Array.isArray(payload.allowedClasses)) {
+    updateDoc.allowedClasses = payload.allowedClasses.map(cleanString).filter(Boolean);
+  }
+
   const employee = await Employee.findByIdAndUpdate(
     id,
-    {
-      name,
-      role: payload.role || "teacher",
-      salaryType: payload.salaryType || "monthly",
-      salaryAmount: normalizeMoney(payload.salaryAmount),
-      assignedClass: cleanString(payload.assignedClass),
-      isClassTeacher: Boolean(payload.isClassTeacher) && payload.role === "teacher",
-      subject: cleanString(payload.subject),
-      joiningDate: payload.joiningDate || new Date(),
-      status: payload.status || "active",
-      contactInfo: normalizeContactInfo(payload.contactInfo),
-    },
+    updateDoc,
     { new: true, runValidators: true },
   );
 

@@ -20,6 +20,8 @@ const schoolSettingSchema = new mongoose.Schema(
     admissionNotice: { type: String, default: "Admission open. Contact school office for details.", trim: true },
     principalName: { type: String, default: "Principal", trim: true },
     resultRemarksDefault: { type: String, default: "She/He has been consistently progressing.", trim: true },
+    // Per-class subject override: { "Class 1": ["Bangla","English",...], ... }
+    classSubjectsConfig: { type: Map, of: [String], default: {} },
   },
   { timestamps: true },
 );
