@@ -4891,26 +4891,29 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
   };
 
   const renderAdminSubjectManagement = () => {
-    const allClasses = [...new Set([
-      ...data.students.map((s) => s.className),
-      ...academicClassOptions.map((c) => c.className),
-    ].filter(Boolean))].sort((a, b) => {
-      const idx = new Map(academicClassOptions.map((c, i) => [c.className, i]));
-      return (idx.get(a) ?? 999) - (idx.get(b) ?? 999);
-    });
+    // Only the catalog group relevant to the selected class
+    const activeCatalogKey  = subjectMgmtClass ? catalogKeyForClass(subjectMgmtClass) : null;
+    const activeCatalogSubjects = activeCatalogKey ? (subjectCatalog[activeCatalogKey] || []) : [];
 
-    const selectedSubjects = subjectMgmtClass
+    const selectedSubjects  = subjectMgmtClass
       ? (subjectMgmtDraft[subjectMgmtClass] ?? subjectsForClass(subjectMgmtClass, subjectMgmtDraft))
       : [];
-    const defaultSubjects = subjectsForClass(subjectMgmtClass);
+    const defaultSubjects   = subjectMgmtClass ? subjectsForClass(subjectMgmtClass) : [];
+
+    const catalogGroupLabel = {
+      prePrimary: "Pre-Primary",
+      primary:    "Primary (Class 1–5)",
+      junior:     "Junior (Class 6–8)",
+      science:    "Higher Secondary — Science",
+      arts:       "Higher Secondary — Arts",
+      commerce:   "Higher Secondary — Commerce",
+    }[activeCatalogKey] || "";
 
     const toggleSubject = (subj) => {
       const current = subjectMgmtDraft[subjectMgmtClass] ?? subjectsForClass(subjectMgmtClass, subjectMgmtDraft);
       const next = current.includes(subj) ? current.filter((s) => s !== subj) : [...current, subj];
       setSubjectMgmtDraft((prev) => ({ ...prev, [subjectMgmtClass]: next }));
     };
-
-    const catalogGroupLabels = { prePrimary:"Pre-Primary (Play, Nursery, KG)", primary:"Primary (Class 1–5)", junior:"Junior (Class 6–8)", science:"Higher Secondary — Science", arts:"Higher Secondary — Arts", commerce:"Higher Secondary — Commerce" };
 
     const handleSave = async () => {
       setSubjectMgmtSaving(true);
@@ -4922,87 +4925,125 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
       finally { setSubjectMgmtSaving(false); }
     };
 
+    // Grouped class picker — shown only when no class is selected
+    const classPicker = [
+      { label: "Pre-Primary",          classes: ["Play", "Nursery", "KG"],             color: "#7c3aed" },
+      { label: "Primary (Class 1–5)",  classes: ["Class 1","Class 2","Class 3","Class 4","Class 5"], color: "#2563eb" },
+      { label: "Junior (Class 6–8)",   classes: ["Class 6","Class 7","Class 8"],        color: "#0891b2" },
+      { label: "Science",              classes: ["Class 9 Science","Class 10 Science","Class 11 Science","Class 12 Science"], color: "#059669" },
+      { label: "Arts",                 classes: ["Class 9 Arts","Class 10 Arts","Class 11 Arts","Class 12 Arts"],            color: "#d97706" },
+      { label: "Commerce",             classes: ["Class 9 Commerce","Class 10 Commerce","Class 11 Commerce","Class 12 Commerce"], color: "#dc2626" },
+    ];
+
+    const catalogAll = new Set(Object.values(subjectCatalog).flat());
+    const customOnly = selectedSubjects.filter((s) => !catalogAll.has(s));
+
     return (
       <div className="stack">
         <SectionHeader eyebrow="Administration" title="Subject Management"
-          action={(
-            <select className="control small" value={subjectMgmtClass} onChange={(e) => setSubjectMgmtClass(e.target.value)}>
-              <option value="">— Select a class —</option>
-              {allClasses.map((c) => <option key={c} value={c}>{c}</option>)}
-            </select>
+          action={subjectMgmtClass && (
+            <button type="button" className="btn success" disabled={subjectMgmtSaving} onClick={handleSave}>
+              {subjectMgmtSaving ? "Saving…" : "Save Subjects"}
+            </button>
           )}
         />
 
-        {!subjectMgmtClass ? (
-          <div className="info-card" style={{ textAlign:"center", padding:"40px 24px" }}>
-            <DashboardIcon name="marks" style={{ width:40, height:40, margin:"0 auto 12px", opacity:0.3 }} />
-            <h3 style={{ margin:"0 0 6px" }}>Select a class to manage subjects</h3>
-            <p style={{ margin:0, color:"var(--edu-muted)", fontSize:14 }}>Use the dropdown above to choose a class.</p>
-          </div>
-        ) : (
-          <div className="panel" style={{ padding:"22px" }}>
-            {/* Header row */}
-            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:12, marginBottom:20, paddingBottom:16, borderBottom:"1px solid var(--edu-border)" }}>
-              <div>
-                <h3 style={{ margin:0, fontSize:16 }}>Subjects for <em style={{ fontStyle:"normal", color:"var(--app-primary,#2563eb)" }}>{subjectMgmtClass}</em></h3>
-                <p style={{ margin:"3px 0 0", fontSize:13, color:"var(--edu-muted)" }}>{selectedSubjects.length} subject{selectedSubjects.length !== 1 ? "s" : ""} selected — check or uncheck to configure</p>
-              </div>
-              <div style={{ display:"flex", gap:8 }}>
-                <button type="button" className="btn soft" style={{ fontSize:12 }}
-                  onClick={() => setSubjectMgmtDraft((prev) => ({ ...prev, [subjectMgmtClass]: [...defaultSubjects] }))}>
-                  Reset to Default
-                </button>
-                <button type="button" className="btn success" style={{ fontSize:12 }}
-                  disabled={subjectMgmtSaving} onClick={handleSave}>
-                  {subjectMgmtSaving ? "Saving…" : "Save Subjects"}
-                </button>
-              </div>
-            </div>
-
-            {/* Grouped checkboxes from catalog */}
-            <div style={{ display:"flex", flexDirection:"column", gap:20 }}>
-              {Object.entries(subjectCatalog).map(([group, subjects]) => (
-                <div key={group}>
-                  <p style={{ margin:"0 0 10px", fontSize:11, fontWeight:800, textTransform:"uppercase", letterSpacing:"0.08em", color:"var(--edu-muted)" }}>{catalogGroupLabels[group] || group}</p>
-                  <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))", gap:8 }}>
-                    {subjects.map((subj) => {
-                      const checked = selectedSubjects.includes(subj);
-                      return (
-                        <label key={subj} style={{ display:"flex", alignItems:"center", gap:9, padding:"9px 13px", borderRadius:9, cursor:"pointer", fontSize:13, fontWeight: checked ? 700 : 500, background: checked ? "color-mix(in srgb,var(--app-primary,#2563eb) 10%,var(--app-surface,#fff))" : "var(--edu-bg-alt,#f8fafc)", border:`1.5px solid ${checked ? "var(--app-primary,#2563eb)" : "var(--edu-border,#e2e8f0)"}`, transition:"all 0.15s", userSelect:"none" }}>
-                          <input type="checkbox" checked={checked} onChange={() => toggleSubject(subj)} style={{ width:15, height:15, cursor:"pointer", accentColor:"var(--app-primary,#2563eb)", flexShrink:0 }} />
-                          {subj}
-                        </label>
-                      );
-                    })}
+        {/* ── Class picker (shown when no class selected) ── */}
+        {!subjectMgmtClass && (
+          <div className="panel" style={{ padding:"20px 22px" }}>
+            <p style={{ margin:"0 0 18px", fontSize:13, color:"var(--edu-muted)" }}>Select a class to view and configure its subjects.</p>
+            <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
+              {classPicker.map(({ label, classes, color }) => (
+                <div key={label}>
+                  <p style={{ margin:"0 0 8px", fontSize:11, fontWeight:800, textTransform:"uppercase", letterSpacing:"0.08em", color:"var(--edu-muted)" }}>{label}</p>
+                  <div style={{ display:"flex", flexWrap:"wrap", gap:7 }}>
+                    {classes.map((cls) => (
+                      <button key={cls} type="button"
+                        onClick={() => setSubjectMgmtClass(cls)}
+                        style={{ padding:"6px 14px", borderRadius:8, fontSize:13, fontWeight:600, cursor:"pointer", border:`1.5px solid ${color}40`, background:`${color}0d`, color, transition:"all 0.12s" }}
+                        onMouseEnter={(e) => { e.currentTarget.style.background = `${color}20`; e.currentTarget.style.borderColor = color; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.background = `${color}0d`; e.currentTarget.style.borderColor = `${color}40`; }}
+                      >{cls}</button>
+                    ))}
                   </div>
                 </div>
               ))}
+            </div>
+          </div>
+        )}
 
-              {/* Custom subjects not in catalog */}
-              {(() => {
-                const catalogAll = new Set(Object.values(subjectCatalog).flat());
-                const customOnly = selectedSubjects.filter((s) => !catalogAll.has(s));
-                if (customOnly.length === 0 && !subjectMgmtClass) return null;
-                return (
-                  <div>
-                    <p style={{ margin:"0 0 10px", fontSize:11, fontWeight:800, textTransform:"uppercase", letterSpacing:"0.08em", color:"var(--edu-muted)" }}>Custom Subjects</p>
-                    <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))", gap:8, marginBottom:customOnly.length > 0 ? 10 : 0 }}>
-                      {customOnly.map((subj) => (
-                        <label key={subj} style={{ display:"flex", alignItems:"center", gap:9, padding:"9px 13px", borderRadius:9, cursor:"pointer", fontSize:13, fontWeight:700, background:"color-mix(in srgb,var(--app-primary,#2563eb) 10%,var(--app-surface,#fff))", border:"1.5px solid var(--app-primary,#2563eb)", transition:"all 0.15s", userSelect:"none" }}>
-                          <input type="checkbox" checked onChange={() => toggleSubject(subj)} style={{ width:15, height:15, cursor:"pointer", accentColor:"var(--app-primary,#2563eb)", flexShrink:0 }} />
-                          {subj}
-                        </label>
-                      ))}
-                    </div>
-                    <form onSubmit={(e) => { e.preventDefault(); const input = e.target.elements.newSubject; const val = input.value.trim(); if (!val || selectedSubjects.includes(val)) return; setSubjectMgmtDraft((prev) => ({ ...prev, [subjectMgmtClass]: [...(prev[subjectMgmtClass] ?? defaultSubjects), val] })); input.value = ""; }}>
-                      <div style={{ display:"flex", gap:8, alignItems:"center" }}>
-                        <input name="newSubject" className="control" style={{ maxWidth:240 }} placeholder="Add a custom subject…" />
-                        <button type="submit" className="btn primary" style={{ fontSize:13, minHeight:38 }}>+ Add</button>
-                      </div>
-                    </form>
+        {/* ── Subject editor (shown after class is selected) ── */}
+        {subjectMgmtClass && (
+          <div className="panel" style={{ padding:"22px" }}>
+            {/* Header */}
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:12, marginBottom:20, paddingBottom:16, borderBottom:"1px solid var(--edu-border)" }}>
+              <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+                <button type="button" onClick={() => setSubjectMgmtClass("")}
+                  style={{ display:"inline-flex", alignItems:"center", gap:5, padding:"5px 12px", borderRadius:8, border:"1.5px solid var(--edu-border)", background:"var(--edu-bg-alt,#f8fafc)", fontSize:12, fontWeight:600, cursor:"pointer", color:"var(--edu-muted)" }}>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M15 18 9 12l6-6"/></svg>
+                  Back
+                </button>
+                <div>
+                  <h3 style={{ margin:0, fontSize:15 }}>
+                    <span style={{ color:"var(--app-primary,#2563eb)", fontWeight:800 }}>{subjectMgmtClass}</span>
+                    {catalogGroupLabel && <span style={{ marginLeft:8, fontSize:12, fontWeight:500, color:"var(--edu-muted)", background:"var(--edu-bg-alt,#f8fafc)", border:"1px solid var(--edu-border)", borderRadius:6, padding:"2px 8px" }}>{catalogGroupLabel}</span>}
+                  </h3>
+                  <p style={{ margin:"3px 0 0", fontSize:12, color:"var(--edu-muted)" }}>{selectedSubjects.length} subject{selectedSubjects.length !== 1 ? "s" : ""} selected</p>
+                </div>
+              </div>
+              <button type="button" className="btn soft" style={{ fontSize:12 }}
+                onClick={() => setSubjectMgmtDraft((prev) => ({ ...prev, [subjectMgmtClass]: [...defaultSubjects] }))}>
+                Reset to Default
+              </button>
+            </div>
+
+            {/* Only the relevant catalog group for this class */}
+            <div style={{ display:"flex", flexDirection:"column", gap:20 }}>
+              <div>
+                <p style={{ margin:"0 0 10px", fontSize:11, fontWeight:800, textTransform:"uppercase", letterSpacing:"0.08em", color:"var(--edu-muted)" }}>
+                  {catalogGroupLabel} Subjects
+                </p>
+                <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))", gap:8 }}>
+                  {activeCatalogSubjects.map((subj) => {
+                    const checked = selectedSubjects.includes(subj);
+                    return (
+                      <label key={subj} style={{ display:"flex", alignItems:"center", gap:9, padding:"9px 13px", borderRadius:9, cursor:"pointer", fontSize:13, fontWeight: checked ? 700 : 500, background: checked ? "color-mix(in srgb,var(--app-primary,#2563eb) 10%,var(--app-surface,#fff))" : "var(--edu-bg-alt,#f8fafc)", border:`1.5px solid ${checked ? "var(--app-primary,#2563eb)" : "var(--edu-border,#e2e8f0)"}`, transition:"all 0.15s", userSelect:"none" }}>
+                        <input type="checkbox" checked={checked} onChange={() => toggleSubject(subj)} style={{ width:15, height:15, cursor:"pointer", accentColor:"var(--app-primary,#2563eb)", flexShrink:0 }} />
+                        {subj}
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Custom subjects (not in any catalog group) */}
+              <div>
+                <p style={{ margin:"0 0 10px", fontSize:11, fontWeight:800, textTransform:"uppercase", letterSpacing:"0.08em", color:"var(--edu-muted)" }}>Custom Subjects</p>
+                {customOnly.length > 0 && (
+                  <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))", gap:8, marginBottom:10 }}>
+                    {customOnly.map((subj) => (
+                      <label key={subj} style={{ display:"flex", alignItems:"center", gap:9, padding:"9px 13px", borderRadius:9, cursor:"pointer", fontSize:13, fontWeight:700, background:"color-mix(in srgb,var(--app-primary,#2563eb) 10%,var(--app-surface,#fff))", border:"1.5px solid var(--app-primary,#2563eb)", transition:"all 0.15s", userSelect:"none" }}>
+                        <input type="checkbox" checked onChange={() => toggleSubject(subj)} style={{ width:15, height:15, cursor:"pointer", accentColor:"var(--app-primary,#2563eb)", flexShrink:0 }} />
+                        {subj}
+                      </label>
+                    ))}
                   </div>
-                );
-              })()}
+                )}
+                <form onSubmit={(e) => { e.preventDefault(); const input = e.target.elements.newSubject; const val = input.value.trim(); if (!val || selectedSubjects.includes(val)) return; setSubjectMgmtDraft((prev) => ({ ...prev, [subjectMgmtClass]: [...(prev[subjectMgmtClass] ?? defaultSubjects), val] })); input.value = ""; }}>
+                  <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+                    <input name="newSubject" className="control" style={{ maxWidth:240 }} placeholder="Add a custom subject…" />
+                    <button type="submit" className="btn primary" style={{ fontSize:13, minHeight:38 }}>+ Add</button>
+                  </div>
+                </form>
+              </div>
+
+              {/* Save row at bottom */}
+              <div style={{ display:"flex", justifyContent:"flex-end", gap:8, paddingTop:12, borderTop:"1px solid var(--edu-border)" }}>
+                <button type="button" className="btn soft" onClick={() => setSubjectMgmtClass("")}>← Back to Classes</button>
+                <button type="button" className="btn success" disabled={subjectMgmtSaving} onClick={handleSave}>
+                  {subjectMgmtSaving ? "Saving…" : `Save Subjects for ${subjectMgmtClass}`}
+                </button>
+              </div>
             </div>
           </div>
         )}
