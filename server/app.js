@@ -23,7 +23,8 @@ const expenseRoutes = require("./routes/expenseRoutes");
 const sectionRoutes = require("./routes/sectionRoutes");
 const classroomRoutes = require("./routes/classroomRoutes");
 const dbConfigRoutes = require("./routes/dbConfigRoutes");
-const leaveRoutes    = require("./routes/leaveRoutes");
+const leaveRoutes      = require("./routes/leaveRoutes");
+const promotionRoutes  = require("./routes/promotionRoutes");
 
 const app = express();
 
@@ -67,7 +68,8 @@ app.use("/api/expenses", expenseRoutes);
 app.use("/api/sections", sectionRoutes);
 app.use("/api/classrooms", classroomRoutes);
 app.use("/api/db-config", dbConfigRoutes);
-app.use("/api/leaves",    leaveRoutes);
+app.use("/api/leaves",     leaveRoutes);
+app.use("/api/promotion",  promotionRoutes);
 
 // Serve the built React frontend when running only the backend server.
 const clientDistPath = path.join(__dirname, "..", "client", "dist");

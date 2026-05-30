@@ -57,6 +57,7 @@ const navSections = [
       { key: "teacherAccess",     label: "Class Access", icon: "users",   allowedRoles: ["admin"] },
       { key: "subjectManagement", label: "Subjects",     icon: "marks",   allowedRoles: ["admin"] },
       { key: "schoolSettings",    label: "School Setup", icon: "school",  allowedRoles: ["admin"] },
+      { key: "promotion",         label: "Promotion",    icon: "promote", allowedRoles: ["admin"] },
     ],
   },
 ];
@@ -123,6 +124,7 @@ function Icon({ name }) {
     shield: <><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/></>,
     addUser: <><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6"/><path d="M22 11h-6"/></>,
     school: <><path d="m2 22 10-9 10 9"/><path d="M4 13V9l8-7 8 7v4"/><path d="M9 22v-5h6v5"/><path d="M9 10h1"/><path d="M14 10h1"/></>,
+    promote: <><path d="M12 20V9"/><path d="m8 13 4-4 4 4"/><path d="M5 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-1"/></>,
   };
   return <svg {...props}>{icons[name] || icons.dashboard}</svg>;
 }

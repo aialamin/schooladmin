@@ -844,6 +844,7 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
   const [profileTab, setProfileTab] = useState("overview"); // "overview" | "payments" | "marks" | "results"
   const [markBulkRows, setMarkBulkRows] = useState([]); // [{ subject, totalMarks, obtainedMarks, note, enabled }]
   const [markEntryClass, setMarkEntryClass] = useState(""); // class filter for admin bulk mark entry
+  const [markEntrySection, setMarkEntrySection] = useState(""); // section filter for admin bulk mark entry
   const [calendarYear, setCalendarYear] = useState(() => new Date().getFullYear());
   const [resultCardFilter, setResultCardFilter] = useState({ student: "", exam: "", class: "", teacher: "" });
   const [classFilter, setClassFilter] = useState("");
@@ -944,6 +945,14 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
   const [userPasswordLoading, setUserPasswordLoading] = useState(false);
   const [adminUserMgmtOpen, setAdminUserMgmtOpen] = useState(false); // user mgmt panel in settings
   const [userMgmtSearch, setUserMgmtSearch] = useState(""); // search filter in user mgmt panel
+
+  // Auto-promotion admin state
+  const [promotionPreview, setPromotionPreview] = useState(null);  // preview result from server
+  const [promotionLoading, setPromotionLoading] = useState(false);
+  const [promotionRunning, setPromotionRunning] = useState(false);
+  const [promotionResult, setPromotionResult] = useState(null);    // result after running promotion
+  const [promotionYear, setPromotionYear] = useState(() => new Date().getFullYear());
+  const [promotionPassMark, setPromotionPassMark] = useState(33);
 
   const isAdmin = user.role === "admin";
   const financeAllowed = ["admin", "accounts", "accountant"].includes(user.role);
@@ -1097,7 +1106,7 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
       } else {
         setForm(emptyForms[type]);
       }
-      if (type === "mark") setMarkEntryClass(""); // reset class filter for fresh entry
+      if (type === "mark") { setMarkEntryClass(""); setMarkEntrySection(""); } // reset class/section filter for fresh entry
       if (type === "payment") { setPayStudentSearch(""); setPayStudentClass(""); setPayStudentSection(""); setPayStudentMode("search"); setPayStudentOpen(false); }
       setModal(type);
       return;
@@ -3279,7 +3288,7 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
   const sectionsForMarksClass = marksClassFilter
     ? data.sections.filter((s) => s.className === marksClassFilter)
     : [];
-  const marksFilterSection = marksSectionFilter ? data.sections.find((s) => s._id === marksSectionFilter) : null;
+  const marksFilterSection = marksSectionFilter ? data.sections.find((s) => String(s._id) === marksSectionFilter) : null;
   const studentIdsInMarksSection = useMemo(() => {
     if (!marksFilterSection) return null;
     return new Set(
@@ -3338,7 +3347,7 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
 
     // Section label for breadcrumb
     const activeSectionName = marksSectionFilter
-      ? (data.sections.find((s) => s._id === marksSectionFilter)?.sectionName || "")
+      ? (data.sections.find((s) => String(s._id) === marksSectionFilter)?.sectionName || "")
       : "";
 
     return (
@@ -5001,6 +5010,168 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
     );
   };
 
+  const renderAdminPromotion = () => {
+    const handlePreview = async () => {
+      setPromotionLoading(true); setPromotionPreview(null); setPromotionResult(null);
+      try {
+        const res = await api.get(`/api/promotion/preview?year=${promotionYear}&passMark=${promotionPassMark}`, { headers: { Authorization: `Bearer ${token}` } });
+        setPromotionPreview(res.data);
+      } catch (err) { setError(getErrorMessage(err)); } finally { setPromotionLoading(false); }
+    };
+    const handleRun = async () => {
+      if (!window.confirm(`Run annual promotion for ${promotionYear}?\n\nThis will move all passing students to the next class and cannot be undone.`)) return;
+      setPromotionRunning(true); setPromotionResult(null);
+      try {
+        const res = await api.post("/api/promotion/run", { year: promotionYear, passMark: promotionPassMark }, { headers: { Authorization: `Bearer ${token}` } });
+        setPromotionResult(res.data);
+        setPromotionPreview(null);
+        // Refresh student data after promotion
+        const partial = await refreshPartialData(token, ["students", "sections"]);
+        setData(prev => ({ ...prev, ...partial }));
+        setSuccess(`Promotion complete! ${res.data.promoted} students promoted, ${res.data.graduated} graduated.`);
+      } catch (err) { setError(getErrorMessage(err)); } finally { setPromotionRunning(false); }
+    };
+
+    const SummaryBadge = ({ count, label, color }) => (
+      <div style={{ textAlign:"center", padding:"16px 20px", borderRadius:"16px", background:`${color}12`, border:`1.5px solid ${color}30`, minWidth:100 }}>
+        <div style={{ fontSize:28, fontWeight:800, color, lineHeight:1 }}>{count}</div>
+        <div style={{ fontSize:12, fontWeight:700, color:"var(--ui-muted,#64748b)", marginTop:4 }}>{label}</div>
+      </div>
+    );
+
+    const preview = promotionPreview || promotionResult;
+
+    return (
+      <div className="stack">
+        <SectionHeader eyebrow="Administration" title="Annual Student Promotion"
+          action={
+            <div style={{ display:"flex", gap:8 }}>
+              <button className="btn soft" type="button" onClick={handlePreview} disabled={promotionLoading}>
+                {promotionLoading ? "Loading…" : "Preview"}
+              </button>
+              <button className="btn primary" type="button" onClick={handleRun} disabled={promotionRunning || promotionLoading}>
+                {promotionRunning ? "Promoting…" : "Run Promotion"}
+              </button>
+            </div>
+          }
+        />
+
+        {/* Settings row */}
+        <section className="panel" style={{ padding:"20px 24px" }}>
+          <div style={{ display:"flex", flexWrap:"wrap", gap:20, alignItems:"flex-end" }}>
+            <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
+              <label style={{ fontSize:11, fontWeight:800, textTransform:"uppercase", letterSpacing:"0.07em", color:"var(--ui-muted,#64748b)" }}>Academic Year</label>
+              <select className="control" value={promotionYear} onChange={(e) => { setPromotionYear(Number(e.target.value)); setPromotionPreview(null); setPromotionResult(null); }} style={{ minWidth:100 }}>
+                {[...Array(5)].map((_, i) => { const y = new Date().getFullYear() - 2 + i; return <option key={y} value={y}>{y}</option>; })}
+              </select>
+            </div>
+            <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
+              <label style={{ fontSize:11, fontWeight:800, textTransform:"uppercase", letterSpacing:"0.07em", color:"var(--ui-muted,#64748b)" }}>Pass Mark (%)</label>
+              <input className="control" type="number" min={1} max={99} value={promotionPassMark}
+                onChange={(e) => { setPromotionPassMark(Number(e.target.value)); setPromotionPreview(null); setPromotionResult(null); }}
+                style={{ width:80 }}
+              />
+            </div>
+            <div style={{ paddingBottom:2 }}>
+              <button className="btn soft" type="button" onClick={handlePreview} disabled={promotionLoading} style={{ minWidth:140 }}>
+                {promotionLoading ? "Loading preview…" : "Preview Results"}
+              </button>
+            </div>
+          </div>
+          <p style={{ margin:"14px 0 0", fontSize:13, color:"var(--ui-muted,#64748b)", lineHeight:1.5 }}>
+            <strong style={{ color:"var(--ui-text,#1e293b)" }}>How it works:</strong> On January 1st every year the system automatically checks which students passed ({promotionPassMark}%+) and moves them to the next class. Class 12 graduates are marked inactive. Run manually here at any time to trigger the same process.
+          </p>
+        </section>
+
+        {/* Summary cards */}
+        {preview && (
+          <>
+            <div style={{ display:"flex", flexWrap:"wrap", gap:12 }}>
+              <SummaryBadge count={preview.summary?.total     ?? 0} label="Total Students" color="#2563eb" />
+              <SummaryBadge count={preview.summary?.promoted  ?? preview.promoted  ?? 0} label="To Promote"    color="#16a34a" />
+              <SummaryBadge count={preview.summary?.graduated ?? preview.graduated ?? 0} label="Graduated"     color="#7c3aed" />
+              <SummaryBadge count={preview.summary?.retained  ?? preview.retained  ?? 0} label="Held Back"     color="#dc2626" />
+              <SummaryBadge count={preview.summary?.noMarks   ?? preview.noMarks   ?? 0} label="No Marks"      color="#d97706" />
+            </div>
+
+            {/* Promoted list */}
+            {(preview.promoted?.length > 0) && (
+              <section className="panel" style={{ padding:0, overflow:"hidden" }}>
+                <div style={{ padding:"14px 20px", borderBottom:"1px solid var(--ui-line,#e2e8f0)", background:"var(--app-surface-2,#f8fafc)" }}>
+                  <h3 style={{ margin:0, fontSize:14, fontWeight:700, color:"#16a34a" }}>Students to Promote ({preview.promoted.length})</h3>
+                </div>
+                <div style={{ overflowX:"auto" }}>
+                  <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
+                    <thead>
+                      <tr style={{ background:"var(--app-surface-2,#f8fafc)" }}>
+                        <th style={{ padding:"10px 16px", textAlign:"left", fontWeight:700, color:"var(--ui-muted,#64748b)", fontSize:11, textTransform:"uppercase", letterSpacing:"0.05em" }}>Student</th>
+                        <th style={{ padding:"10px 16px", textAlign:"left", fontWeight:700, color:"var(--ui-muted,#64748b)", fontSize:11, textTransform:"uppercase", letterSpacing:"0.05em" }}>From Class</th>
+                        <th style={{ padding:"10px 16px", textAlign:"left", fontWeight:700, color:"var(--ui-muted,#64748b)", fontSize:11, textTransform:"uppercase", letterSpacing:"0.05em" }}>To Class</th>
+                        <th style={{ padding:"10px 16px", textAlign:"right", fontWeight:700, color:"var(--ui-muted,#64748b)", fontSize:11, textTransform:"uppercase", letterSpacing:"0.05em" }}>Score</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {preview.promoted.slice(0, 50).map((p, i) => (
+                        <tr key={p.student?._id || i} style={{ borderTop:"1px solid var(--ui-line,#e2e8f0)", background: i % 2 ? "var(--app-surface-2,#f8fafc)" : undefined }}>
+                          <td style={{ padding:"10px 16px", fontWeight:600 }}>{p.student?.name || "—"} <span style={{ fontSize:11, color:"var(--ui-muted,#64748b)", fontWeight:400 }}>#{p.student?.rollNumber}</span></td>
+                          <td style={{ padding:"10px 16px", color:"#dc2626" }}>{p.fromClass}</td>
+                          <td style={{ padding:"10px 16px", color:"#16a34a", fontWeight:700 }}>{p.toClass}</td>
+                          <td style={{ padding:"10px 16px", textAlign:"right", fontWeight:700 }}>{p.percent?.toFixed(1)}%</td>
+                        </tr>
+                      ))}
+                      {preview.promoted.length > 50 && (
+                        <tr><td colSpan={4} style={{ padding:"10px 16px", textAlign:"center", color:"var(--ui-muted,#64748b)", fontSize:12 }}>…and {preview.promoted.length - 50} more</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            )}
+
+            {/* Retained/failed list */}
+            {(preview.retained?.length > 0) && (
+              <section className="panel" style={{ padding:0, overflow:"hidden" }}>
+                <div style={{ padding:"14px 20px", borderBottom:"1px solid var(--ui-line,#e2e8f0)", background:"var(--app-surface-2,#f8fafc)" }}>
+                  <h3 style={{ margin:0, fontSize:14, fontWeight:700, color:"#dc2626" }}>Students Held Back ({preview.retained.length})</h3>
+                </div>
+                <div style={{ overflowX:"auto" }}>
+                  <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
+                    <thead>
+                      <tr style={{ background:"var(--app-surface-2,#f8fafc)" }}>
+                        <th style={{ padding:"10px 16px", textAlign:"left", fontWeight:700, color:"var(--ui-muted,#64748b)", fontSize:11, textTransform:"uppercase" }}>Student</th>
+                        <th style={{ padding:"10px 16px", textAlign:"left", fontWeight:700, color:"var(--ui-muted,#64748b)", fontSize:11, textTransform:"uppercase" }}>Class</th>
+                        <th style={{ padding:"10px 16px", textAlign:"right", fontWeight:700, color:"var(--ui-muted,#64748b)", fontSize:11, textTransform:"uppercase" }}>Score</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {preview.retained.slice(0, 30).map((p, i) => (
+                        <tr key={p.student?._id || i} style={{ borderTop:"1px solid var(--ui-line,#e2e8f0)", background: i % 2 ? "var(--app-surface-2,#f8fafc)" : undefined }}>
+                          <td style={{ padding:"10px 16px", fontWeight:600 }}>{p.student?.name || "—"}</td>
+                          <td style={{ padding:"10px 16px" }}>{p.student?.className}</td>
+                          <td style={{ padding:"10px 16px", textAlign:"right", color:"#dc2626", fontWeight:700 }}>{p.percent?.toFixed(1)}%</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            )}
+
+            {/* Action */}
+            {promotionPreview && !promotionResult && (
+              <div style={{ display:"flex", justifyContent:"flex-end", gap:10 }}>
+                <button className="btn soft" type="button" onClick={() => setPromotionPreview(null)}>Cancel</button>
+                <button className="btn primary" type="button" onClick={handleRun} disabled={promotionRunning}>
+                  {promotionRunning ? "Promoting…" : `Run Promotion for ${promotionYear}`}
+                </button>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    );
+  };
+
   const renderAdminSchoolSettings = () => (
     <div className="stack">
       <SectionHeader eyebrow="Administration" title="School Setup"
@@ -5881,12 +6052,15 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
     return data.students.filter((s) => mySectionClasses.has(s.className));
   }, [user, data.sections, data.students, data.employees]);
 
-  // For admin/non-teacher: apply the class-picker filter from the mark entry form
+  // For admin/non-teacher: apply the class-picker and section filter from the mark entry form
   const markEntryStudents = useMemo(() => {
     if (user.role === "teacher") return markEntryStudentsBase; // already class-filtered
-    if (!markEntryClass) return markEntryStudentsBase;
-    return markEntryStudentsBase.filter((s) => s.className === markEntryClass);
-  }, [user.role, markEntryStudentsBase, markEntryClass]);
+    let list = markEntryClass ? markEntryStudentsBase.filter((s) => s.className === markEntryClass) : markEntryStudentsBase;
+    if (markEntrySection) {
+      list = list.filter((s) => String(s.section?._id || s.section) === markEntrySection);
+    }
+    return list;
+  }, [user.role, markEntryStudentsBase, markEntryClass, markEntrySection]);
   const salaryAutoPreview = modal === "salary" ? getSalaryAutoValues(form.employee, form.salaryMonth) : null;
   const salaryDuePreview = modal === "salary" ? Math.max(Number(form.amount || salaryAutoPreview?.amount || 0) - Number(form.paidAmount || 0), 0) : 0;
   const selectedSalaryEmployee = modal === "salary" ? data.employees.find((item) => item._id === form.employee) : null;
@@ -6538,6 +6712,7 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
       {activeView === "teacherAccess"     && isAdmin && renderAdminTeacherAccess()}
       {activeView === "subjectManagement" && isAdmin && renderAdminSubjectManagement()}
       {activeView === "schoolSettings"    && isAdmin && renderAdminSchoolSettings()}
+      {activeView === "promotion"         && isAdmin && renderAdminPromotion()}
 
       {profileStudent && (() => {
         const classColors = { "Play": "#7c3aed", "Nursery": "#0891b2", "KG": "#0d9488", "Class 1": "#2563eb", "Class 2": "#7c3aed", "Class 3": "#059669", "Class 4": "#d97706", "Class 5": "#dc2626", "Class 6": "#4f46e5", "Class 7": "#0891b2", "Class 8": "#0d9488" };
@@ -7285,7 +7460,7 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
                       <select
                         className="control"
                         value={markEntryClass}
-                        onChange={(e) => { setMarkEntryClass(e.target.value); setForm((f) => ({ ...f, student: "" })); }}
+                        onChange={(e) => { setMarkEntryClass(e.target.value); setMarkEntrySection(""); setForm((f) => ({ ...f, student: "" })); }}
                         style={{ width: "100%", fontSize: "14px", fontWeight: 600, borderRadius: "12px", border: `2px solid ${markEntryClass ? "#2563eb" : "var(--edu-border,#e2e8f0)"}`, background: markEntryClass ? "rgba(37,99,235,0.04)" : "var(--ui-surface,#f8fafc)", color: "var(--ui-text,#1e293b)" }}
                       >
                         <option value="">— Choose a class —</option>
@@ -7305,10 +7480,35 @@ export default function Dashboard({ token, user, onLogout, onUserUpdate }) {
                     </div>
                   )}
 
+                  {/* ── Section picker (shows when a class has sections) ── */}
+                  {user.role !== "teacher" && markEntryClass && (() => {
+                    const sectionsForEntry = data.sections.filter((s) => s.className === markEntryClass);
+                    if (sectionsForEntry.length === 0) return null;
+                    return (
+                      <div style={{ marginBottom: "16px" }}>
+                        <label style={{ display: "block", fontSize: "11.5px", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.07em", color: "var(--ui-muted,#64748b)", marginBottom: "7px" }}>
+                          Section <span style={{ fontWeight: 500, textTransform: "none", fontSize: "11px" }}>(optional)</span>
+                        </label>
+                        <select
+                          className="control"
+                          value={markEntrySection}
+                          onChange={(e) => { setMarkEntrySection(e.target.value); setForm((f) => ({ ...f, student: "" })); }}
+                          style={{ width: "100%", fontSize: "14px", fontWeight: 600, borderRadius: "12px", border: `2px solid ${markEntrySection ? "#7c3aed" : "var(--edu-border,#e2e8f0)"}`, background: markEntrySection ? "rgba(124,58,237,0.04)" : "var(--ui-surface,#f8fafc)", color: "var(--ui-text,#1e293b)" }}
+                        >
+                          <option value="">All sections</option>
+                          {sectionsForEntry.map((s) => {
+                            const cnt = markEntryStudentsBase.filter((st) => st.className === markEntryClass && String(st.section?._id || st.section) === String(s._id)).length;
+                            return <option key={s._id} value={String(s._id)}>{s.sectionName}{s.classTeacher?.name ? ` — ${s.classTeacher.name}` : ""} · {cnt} student{cnt !== 1 ? "s" : ""}</option>;
+                          })}
+                        </select>
+                      </div>
+                    );
+                  })()}
+
                   {/* ── Student picker ── */}
                   <div style={{ marginBottom: "18px" }}>
                     <label style={{ display: "block", fontSize: "11.5px", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.07em", color: "var(--ui-muted,#64748b)", marginBottom: "7px" }}>
-                      Student{markEntryClass ? ` — ${markEntryClass}` : ""}
+                      Student{markEntrySection ? ` — ${data.sections.find((s) => String(s._id) === markEntrySection)?.sectionName || ""}` : markEntryClass ? ` — ${markEntryClass}` : ""}
                     </label>
                     <select
                       className="control"

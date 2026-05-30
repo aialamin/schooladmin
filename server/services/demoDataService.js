@@ -410,15 +410,42 @@ async function ensureDemoData() {
     }
   }
 
-  // ── Exam marks for Class 6 + 7 students ───────────────────────────────────
+  // ── Exam marks for ALL demo students (every class in SECTION_CLASSES) ────────
   const teacherUser = otherEmployees.find((e) => e.contactInfo.email === "teacher@school.test");
-  const markedStudents = allStudents.filter((s) => s.className === "Class 6" || s.className === "Class 7");
-  for (const student of markedStudents) {
-    const subjects = subjectsForClass(student.className).slice(0, 5);
+
+  // Seed marks for every student in every demo class
+  for (const student of allStudents) {
+    const subjects = subjectsForClass(student.className);
+    // Deterministically vary scores using roll number chars so each student gets different marks
+    const seed = student.rollNumber.split("").reduce((acc, c) => acc + c.charCodeAt(0), 0);
+
     for (let i = 0; i < subjects.length; i++) {
-      const base = 65 + Math.round((student.rollNumber.charCodeAt(student.rollNumber.length - 1) + i * 7) % 30);
-      await upsertMark(markPayload({ student, subject: subjects[i], examType: "semester", examNo: 1, totalMarks: 100, obtainedMarks: base, contributionPercent: 100, enteredBy: teacherUser?._id }));
-      await upsertMark(markPayload({ student, subject: subjects[i], examType: "monthly",  examNo: 1, totalMarks: 50,  obtainedMarks: Math.max(Math.round(base / 2), 18), contributionPercent: 0, enteredBy: teacherUser?._id }));
+      // Semester 1 — counts 100% toward final result (50–89 range, always passing)
+      const semBase = 50 + ((seed + i * 11) % 40);
+      await upsertMark(markPayload({
+        student, subject: subjects[i], examType: "semester", examNo: 1,
+        totalMarks: 100, obtainedMarks: semBase, contributionPercent: 100,
+        enteredBy: teacherUser?._id,
+      }));
+
+      // Monthly exam 1 — reference only (contribution 0%)
+      const mBase = Math.max(Math.round(semBase * 0.48), 18);
+      await upsertMark(markPayload({
+        student, subject: subjects[i], examType: "monthly", examNo: 1,
+        totalMarks: 50, obtainedMarks: Math.min(mBase, 50), contributionPercent: 0,
+        enteredBy: teacherUser?._id,
+      }));
+    }
+
+    // Class test for first 3 subjects — reference only (contribution 0%)
+    const ctMonth = `${currentYear}-03`;
+    for (let i = 0; i < Math.min(3, subjects.length); i++) {
+      const ctBase = 12 + ((seed + i * 5) % 13);
+      await upsertMark(markPayload({
+        student, subject: subjects[i], examType: "class_test", examNo: 1,
+        month: ctMonth, totalMarks: 25, obtainedMarks: ctBase, contributionPercent: 0,
+        enteredBy: teacherUser?._id,
+      }));
     }
   }
 

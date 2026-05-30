@@ -5,6 +5,7 @@ const app = require("./app");
 const connectDB = require("./config/db");
 const { ensureDemoAccounts } = require("./services/demoAccountService");
 const { ensureDemoData } = require("./services/demoDataService");
+const { scheduleAnnualPromotion } = require("./services/promotionService");
 
 const PORT = Number(process.env.PORT || 5001);
 
@@ -33,6 +34,7 @@ async function initializeApp() {
     await connectDB();
     await ensureDemoAccounts();
     await ensureDemoData();
+    scheduleAnnualPromotion(); // auto-run on January 1st every year
     console.log("Database connected and ready.");
   } catch (error) {
     console.error("Startup error:", error.message);
